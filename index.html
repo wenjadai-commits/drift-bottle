@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"/>
+<meta name="theme-color" content="#0a1628"/>
+<title>漂流瓶 Drift Bottle</title>
+<link rel="manifest" href="manifest.json"/>
+<link rel="icon" type="image/svg+xml" href="favicon.svg"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="漂流瓶"/>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body,#root{width:100%;height:100%;background:#0a1628;font-family:'Zen Maru Gothic',sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
+body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:rgba(168,216,234,0.2);border-radius:3px}
+</style>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.25.6/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ─── Dynamic Theme based on local time ───
+const useTimeTheme = () => {
+  const [hour, setHour] = useState(new Date().getHours());
+  useEffect(() => {
+    const iv = setInterval(() => setHour(new Date().getHours()), 60000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Periods: dawn(5-7), day(7-17), dusk(17-19), night(19-5)
+  const period = hour >= 5 && hour < 7 ? "dawn" : hour >= 7 && hour < 17 ? "day" : hour >= 17 && hour < 19 ? "dusk" : "night";
+  const isDay = period === "day" || period === "dawn";
+  const isDusk = period === "dusk";
+
+  const colors = useMemo(() => {
+    if (period === "night") return {
+      sky1: "#0a1628", sky2: "#0f2035", sky3: "#163050",
+      foam: "#a8d8ea", moonlight: "#e8f4f8", sand: "#f5e6c8", sandDark: "#d4b896",
+      coral: "#ff8a80", shell: "#ffccbc", seaGlass: "#80cbc4", starfish: "#ffab91",
+      pearl: "#fff3e0", pearlGlow: "#ffe0b2",
+      cardBg: "rgba(168,216,234,0.18)", cardBorder: "rgba(168,216,234,0.25)",
+      overlayBg: "rgba(10,22,40,0.85)", panelBg: "rgba(15,32,53,0.95)",
+      tabBg: "rgba(10,22,40,0.6)", tabBorder: "rgba(168,216,234,0.08)",
+      inputBg: "rgba(168,216,234,0.1)", subtleBg: "rgba(255,255,255,0.04)",
+      celestial: "moon", starOpacity: 0.4,
+    };
+    if (period === "dawn") return {
+      sky1: "#1a2a4a", sky2: "#2d4a6a", sky3: "#4a7a9a",
+      foam: "#7ec8d8", moonlight: "#f0e8e0", sand: "#f5dcc0", sandDark: "#d4b896",
+      coral: "#f4a89a", shell: "#ffd5c2", seaGlass: "#6db8b0", starfish: "#f4b89a",
+      pearl: "#fff3e0", pearlGlow: "#ffcc99",
+      cardBg: "rgba(126,200,216,0.18)", cardBorder: "rgba(126,200,216,0.25)",
+      overlayBg: "rgba(26,42,74,0.82)", panelBg: "rgba(30,50,80,0.93)",
+      tabBg: "rgba(26,42,74,0.55)", tabBorder: "rgba(126,200,216,0.1)",
+      inputBg: "rgba(126,200,216,0.1)", subtleBg: "rgba(255,255,255,0.05)",
+      celestial: "sunrise", starOpacity: 0.15,
+    };
+    if (period === "dusk") return {
+      sky1: "#1a1a3a", sky2: "#2a2850", sky3: "#4a3a6a",
+      foam: "#c4a8d8", moonlight: "#f0e0f0", sand: "#f0d0b0", sandDark: "#d4a888",
+      coral: "#e89090", shell: "#f0c8b8", seaGlass: "#88b0a8", starfish: "#e8a888",
+      pearl: "#f8e8d8", pearlGlow: "#f0c898",
+      cardBg: "rgba(196,168,216,0.18)", cardBorder: "rgba(196,168,216,0.22)",
+      overlayBg: "rgba(26,26,58,0.82)", panelBg: "rgba(30,28,60,0.93)",
+      tabBg: "rgba(26,26,58,0.55)", tabBorder: "rgba(196,168,216,0.08)",
+      inputBg: "rgba(196,168,216,0.1)", subtleBg: "rgba(255,255,255,0.04)",
+      celestial: "sunset", starOpacity: 0.2,
+    };
+    // day — warm shallow ocean, soft and easy on the eyes
+    return {
+      sky1: "#d4eef7", sky2: "#a8d5e2", sky3: "#78b8cc",
+      foam: "#5a9ab5", moonlight: "#2c5364", sand: "#e8c888", sandDark: "#c8a060",
+      coral: "#e88a78", shell: "#f0c0a8", seaGlass: "#3a9a88", starfish: "#e89878",
+      pearl: "#fff3e0", pearlGlow: "#ffcc80",
+      cardBg: "rgba(255,255,255,0.45)", cardBorder: "rgba(255,255,255,0.55)",
+      cardText: "#2c5364", cardSubtext: "#5a8a9a",
+      overlayBg: "rgba(44,83,100,0.78)", panelBg: "rgba(230,244,250,0.96)",
+      panelText: "#2c5364",
+      tabBg: "rgba(212,238,247,0.75)", tabBorder: "rgba(90,154,181,0.15)",
+      inputBg: "rgba(90,154,181,0.1)", subtleBg: "rgba(255,255,255,0.2)",
+      celestial: "sun", starOpacity: 0,
+    };
+  }, [period]);
+
+  return { colors, period, isDay, isDusk, hour };
+};
+
+// ─── Ambient Audio ───
+const useAmbientAudio = () => {
+  const ctxRef = useRef(null);
+  const nodesRef = useRef([]);
+  const [playing, setPlaying] = useState(false);
+  const [currentSound, setCurrentSound] = useState(null);
+
+  const stop = useCallback(() => {
+    nodesRef.current.forEach(n => { try { n.stop?.(); } catch {} try { n.disconnect?.(); } catch {} });
+    nodesRef.current = []; setPlaying(false); setCurrentSound(null);
+  }, []);
+
+  const play = useCallback((type) => {
+    stop();
+    if (!ctxRef.current) ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = ctxRef.current;
+    if (ctx.state === "suspended") ctx.resume();
+    const nodes = [];
+    if (type === "waves") {
+      const lfo = ctx.createOscillator(); lfo.type = "sine"; lfo.frequency.value = 0.08;
+      const lg = ctx.createGain(); lg.gain.value = 200; lfo.connect(lg);
+      const ns = ctx.createBufferSource(); const buf = ctx.createBuffer(2, ctx.sampleRate * 8, ctx.sampleRate);
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.3; }
+      ns.buffer = buf; ns.loop = true;
+      const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 400; f.Q.value = 1;
+      lg.connect(f.frequency);
+      const v = ctx.createGain(); v.gain.value = 0.25;
+      ns.connect(f); f.connect(v); v.connect(ctx.destination); lfo.start(); ns.start(); nodes.push(lfo, ns);
+    } else if (type === "rain") {
+      const ns = ctx.createBufferSource(); const buf = ctx.createBuffer(2, ctx.sampleRate * 4, ctx.sampleRate);
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.15; }
+      ns.buffer = buf; ns.loop = true;
+      const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2000;
+      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 8000;
+      const v = ctx.createGain(); v.gain.value = 0.35;
+      ns.connect(hp); hp.connect(lp); lp.connect(v); v.connect(ctx.destination); ns.start(); nodes.push(ns);
+    } else if (type === "melody") {
+      const notes = [261.6, 329.6, 392, 523.2, 392, 329.6, 261.6, 196];
+      const pn = () => { let t = ctx.currentTime; notes.forEach((fr, i) => {
+        const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = fr;
+        const g = ctx.createGain(); g.gain.setValueAtTime(0, t+i*1.2); g.gain.linearRampToValueAtTime(0.08, t+i*1.2+0.3); g.gain.linearRampToValueAtTime(0, t+i*1.2+1.1);
+        o.connect(g); g.connect(ctx.destination); o.start(t+i*1.2); o.stop(t+i*1.2+1.2);
+      }); };
+      pn(); const iv = setInterval(pn, notes.length * 1200); nodes.push({ stop: () => clearInterval(iv) });
+    } else if (type === "night") {
+      const dr = ctx.createOscillator(); dr.type = "sine"; dr.frequency.value = 85;
+      const dg = ctx.createGain(); dg.gain.value = 0.06; dr.connect(dg); dg.connect(ctx.destination); dr.start(); nodes.push(dr);
+      const iv = setInterval(() => {
+        const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = 3800 + Math.random() * 800;
+        const g = ctx.createGain(); const t = ctx.currentTime;
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.03, t+0.02); g.gain.linearRampToValueAtTime(0, t+0.08);
+        o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t+0.1);
+      }, 300 + Math.random() * 400);
+      nodes.push({ stop: () => clearInterval(iv) });
+    }
+    nodesRef.current = nodes; setPlaying(true); setCurrentSound(type);
+  }, [stop]);
+  return { play, stop, playing, currentSound };
+};
+
+// ─── Icons ───
+const I = {
+  bottle: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="24" height="24"><path d="M10 2h4M12 2v3M8 8c0-1.7 1.3-3 3-3h2c1.7 0 3 1.3 3 3v1l1 2v8c0 1.1-.9 2-2 2H9c-1.1 0-2-.9-2-2v-8l1-2V8z"/><path d="M7 15h10" opacity="0.5"/></svg>,
+  mic: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="24" height="24"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0014 0M12 18v3M8 21h8"/></svg>,
+  pearl: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" width="24" height="24"><circle cx="12" cy="12" r="8"/><path d="M8 9c1-2 3-3 5-2.5" opacity="0.5"/><circle cx="10" cy="10" r="1.5" fill="currentColor" opacity="0.2"/></svg>,
+  routine: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="24" height="24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 7V4M16 7V4" /><path d="M8 14l2 2 4-4" opacity="0.8"/></svg>,
+  relax: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="24" height="24"><path d="M12 3c-1 4-4 7-8 8 4 1 7 4 8 8 1-4 4-7 8-8-4-1-7-4-8-8z"/></svg>,
+  plus: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="24" height="24"><path d="M12 5v14M5 12h14"/></svg>,
+  check: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="24" height="24"><path d="M5 12l5 5L19 7"/></svg>,
+  trash: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" width="20" height="20"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 002 2h8a2 2 0 002-2l1-12M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>,
+  back: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M15 18l-6-6 6-6"/></svg>,
+};
+
+// ─── Celestial Body (Sun / Moon) ───
+const Celestial = ({ type, colors }) => {
+  if (type === "sun") return (
+    <div style={{ position: "absolute", top: 28, right: 38, zIndex: 1 }}>
+      {/* Sun rays */}
+      {[0,1,2,3,4,5,6,7].map(i => <div key={i} style={{
+        position: "absolute", top: 25, left: 25, width: 2, height: 14, borderRadius: 1,
+        background: "#f0c870", opacity: 0.25, transformOrigin: "50% 0%",
+        transform: `rotate(${i*45}deg) translateY(-34px)`,
+        animation: `sunRay 3s ease-in-out ${i*0.3}s infinite alternate`,
+      }}/>)}
+      <div style={{
+        width: 50, height: 50, borderRadius: "50%",
+        background: "radial-gradient(circle at 40% 35%, #FFF8E8, #F5D080, #E8B850)",
+        boxShadow: "0 0 40px rgba(240,200,100,0.35), 0 0 80px rgba(232,184,80,0.15)",
+      }}/>
+    </div>
+  );
+  if (type === "sunrise") return (
+    <div style={{ position: "absolute", top: 35, right: 38, zIndex: 1 }}>
+      <div style={{
+        width: 46, height: 46, borderRadius: "50%",
+        background: "radial-gradient(circle at 40% 40%, #FFECD2, #FFA07A, #FF6347)",
+        boxShadow: "0 0 40px rgba(255,160,122,0.5), 0 0 80px rgba(255,99,71,0.2)",
+        animation: "moonGlow 5s ease-in-out infinite",
+      }}/>
+    </div>
+  );
+  if (type === "sunset") return (
+    <div style={{ position: "absolute", top: 32, right: 38, zIndex: 1 }}>
+      <div style={{
+        width: 48, height: 48, borderRadius: "50%",
+        background: "radial-gradient(circle at 35% 35%, #FFD4A0, #E87040, #A03050)",
+        boxShadow: "0 0 40px rgba(232,112,64,0.4), 0 0 80px rgba(160,48,80,0.2)",
+        animation: "moonGlow 6s ease-in-out infinite",
+      }}/>
+    </div>
+  );
+  // moon
+  return (
+    <div style={{
+      position: "absolute", top: 30, right: 40, width: 50, height: 50, borderRadius: "50%",
+      background: `radial-gradient(circle at 35% 35%, ${colors.pearl}, ${colors.sand}80)`,
+      boxShadow: `0 0 40px ${colors.sand}40, 0 0 80px ${colors.sand}20`,
+      animation: "moonGlow 6s ease-in-out infinite", zIndex: 1,
+    }}/>
+  );
+};
+
+// ─── Greeting ───
+const getGreeting = (hour) => {
+  if (hour >= 5 && hour < 7) return "早安，天亮了";
+  if (hour >= 7 && hour < 12) return "早安，陽光正好";
+  if (hour >= 12 && hour < 14) return "午安，記得休息";
+  if (hour >= 14 && hour < 17) return "下午好，繼續加油";
+  if (hour >= 17 && hour < 19) return "傍晚了，辛苦了";
+  if (hour >= 19 && hour < 22) return "晚安，放鬆一下";
+  return "夜深了，好好休息";
+};
+
+// ─── FloatingBottle ───
+const FloatingBottle = ({ bottle, index, onClick, C }) => {
+  const yOff = 30 + (index % 3) * 18;
+  const xPos = 10 + ((index * 37) % 80);
+  const delay = index * 0.7;
+  const dur = 4 + (index % 3) * 1.2;
+  const textColor = C.cardText || C.moonlight;
+  const subColor = C.cardSubtext || C.foam;
+
+  return (
+    <div onClick={() => onClick(bottle)} style={{
+      position: "absolute", left: `${xPos}%`, top: `${yOff}%`, cursor: "pointer",
+      animation: `floatBottle ${dur}s ease-in-out ${delay}s infinite`, zIndex: 10,
+    }}>
+      <div style={{
+        background: C.cardBg,
+        backdropFilter: "blur(6px)", borderRadius: 14, padding: "10px 16px",
+        border: `1px solid ${C.cardBorder}`,
+        maxWidth: 180, minWidth: 80, boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+        opacity: bottle.done ? 0.55 : 1,
+      }}>
+        <div style={{ fontSize: 11, color: subColor, opacity: 0.6, marginBottom: 4, fontFamily: "'Zen Maru Gothic', sans-serif" }}>
+          {bottle.type === "voice" ? "🎙️" : "✉️"} {bottle.time}
+        </div>
+        <div style={{
+          fontSize: 13, color: bottle.done ? C.seaGlass : textColor,
+          fontFamily: "'Zen Maru Gothic', sans-serif", lineHeight: 1.4,
+          textDecoration: bottle.done ? "line-through" : "none", wordBreak: "break-word",
+        }}>{bottle.text}</div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Pearl ───
+const PearlOrb = ({ idea, onClick, index }) => {
+  const tc = idea.thoughts.length;
+  const stage = Math.min(4, tc);
+  const sizes = [36, 48, 58, 70, 85];
+  const size = sizes[stage];
+  const glowI = stage * 8;
+  const xPos = 12 + ((index * 41 + 17) % 76);
+  const yPos = 8 + ((index * 31 + 7) % 72);
+
+  const pc = [
+    { inner: "#b0a080", outer: "#d4b896", glow: "transparent" },
+    { inner: "#d4b896", outer: "#ffccbc", glow: "#ffccbc30" },
+    { inner: "#fff3e0", outer: "#ffe0b2", glow: "#ffe0b240" },
+    { inner: "#fff8e8", outer: "#ffe0b2", glow: "#ffe0b260" },
+    { inner: "#fffdf5", outer: "#ffe8cc", glow: "#ffcc8070" },
+  ];
+  const c = pc[stage];
+  const sl = ["沙粒", "成形中", "小珍珠", "珍珠", "璀璨珍珠"];
+
+  return (
+    <div onClick={() => onClick(idea)} style={{
+      position: "absolute", left: `${xPos}%`, top: `${yPos}%`, cursor: "pointer",
+      animation: `pearlFloat ${5+index%3}s ease-in-out ${index*0.8}s infinite`, zIndex: 10,
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+    }}>
+      {stage >= 2 && <div style={{
+        position: "absolute", width: size*1.8, height: size*1.8, borderRadius: "50%",
+        background: `radial-gradient(circle, ${c.glow}, transparent 70%)`,
+        animation: `pearlPulse ${3+stage*0.5}s ease-in-out infinite`,
+        top: -size*0.4, left: "50%", transform: "translateX(-50%)", pointerEvents: "none",
+      }}/>}
+      <div style={{
+        width: size, height: size, borderRadius: "50%",
+        background: `radial-gradient(circle at 35% 30%, ${c.inner}, ${c.outer})`,
+        boxShadow: stage >= 1 ? `0 0 ${glowI}px ${c.glow}, inset 0 -${size/6}px ${size/4}px rgba(0,0,0,0.1), inset 0 ${size/8}px ${size/5}px rgba(255,255,255,${0.2+stage*0.1})` : "inset 0 1px 3px rgba(255,255,255,0.2)",
+        position: "relative",
+      }}>
+        <div style={{ position: "absolute", top: "18%", left: "25%", width: size*0.25, height: size*0.18, borderRadius: "50%", background: `rgba(255,255,255,${0.15+stage*0.12})`, filter: `blur(${1+stage}px)` }}/>
+        {stage >= 3 && [0,1,2].map(i => <div key={i} style={{
+          position: "absolute", top: `${20+i*25}%`, left: `${15+i*30}%`, color: "#ffe0b2", opacity: 0.7,
+          animation: `sparkleRotate ${2+i*0.7}s linear infinite`, fontSize: 8+stage*2,
+        }}>✦</div>)}
+      </div>
+      <div style={{ background: "rgba(10,22,40,0.65)", backdropFilter: "blur(8px)", borderRadius: 10, padding: "4px 10px", maxWidth: 130, textAlign: "center" }}>
+        <div style={{ fontSize: 12, color: "#e8f4f8", fontFamily: "'Zen Maru Gothic', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 110 }}>{idea.title}</div>
+        <div style={{ fontSize: 9, color: c.outer, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.7, marginTop: 1 }}>{sl[stage]} · {tc} 則想法</div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Idea Detail ───
+const IdeaDetail = ({ idea, onClose, onUpdate, onDelete, C }) => {
+  const [newT, setNewT] = useState("");
+  const tc = idea.thoughts.length;
+  const stage = Math.min(4, tc);
+  const sl = ["沙粒", "成形中", "小珍珠", "珍珠", "璀璨珍珠"];
+  const next = stage < 4 ? sl[stage + 1] : null;
+
+  const add = () => { if (!newT.trim()) return; onUpdate({ ...idea, thoughts: [...idea.thoughts, { text: newT.trim(), time: "剛剛" }] }); setNewT(""); };
+
+  return (
+    <div style={{
+      position: "absolute", inset: 0,
+      background: `linear-gradient(180deg, ${C.sky1} 0%, ${C.sky2} 100%)`,
+      zIndex: 60, display: "flex", flexDirection: "column", animation: "fadeIn 0.3s ease-out", overflow: "hidden",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", padding: 16, gap: 12 }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: C.foam, cursor: "pointer", padding: 4 }}>{I.back}</button>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: C.moonlight, fontSize: 17, fontFamily: "'Zen Maru Gothic', sans-serif", fontWeight: 500 }}>{idea.title}</div>
+          <div style={{ color: "#ffe0b2", fontSize: 11, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.7, marginTop: 2 }}>{sl[stage]} · {tc} 則想法</div>
+        </div>
+        <button onClick={() => onDelete(idea.id)} style={{ background: `${C.coral}18`, border: `1px solid ${C.coral}25`, borderRadius: 10, padding: "6px 8px", color: C.coral, cursor: "pointer" }}>{I.trash}</button>
+      </div>
+      {stage < 4 && <div style={{ padding: "0 16px 12px" }}>
+        <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${Math.min(100,(tc/5)*100)}%`, borderRadius: 2, background: "linear-gradient(90deg,#f5e6c8,#ffe0b2)", transition: "width 0.5s" }}/>
+        </div>
+        <div style={{ fontSize: 10, color: C.foam, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.4, marginTop: 4, textAlign: "right" }}>再 {Math.max(1,(stage+2)-tc)} 則想法就能進化成{next}</div>
+      </div>}
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+        {idea.thoughts.map((t, i) => (
+          <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", animation: `fadeIn 0.3s ease-out ${i*0.05}s both` }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 4 }}>
+              <div style={{ width: 8+Math.min(i,4)*1.5, height: 8+Math.min(i,4)*1.5, borderRadius: "50%", background: i<2?"#d4b896":i<4?"#ffe0b2":"#fff3e0", boxShadow: i>=3?`0 0 6px #ffe0b260`:"none" }}/>
+              {i < idea.thoughts.length - 1 && <div style={{ width: 1, flex: 1, minHeight: 20, background: `linear-gradient(180deg, ${C.foam}20, transparent)` }}/>}
+            </div>
+            <div style={{ flex: 1, background: C.subtleBg, borderRadius: 14, padding: "12px 14px", border: `1px solid rgba(255,255,255,0.06)` }}>
+              <div style={{ color: C.moonlight, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", lineHeight: 1.5 }}>{t.text}</div>
+              <div style={{ color: C.foam, fontSize: 10, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.35, marginTop: 6 }}>{t.time}</div>
+            </div>
+          </div>
+        ))}
+        {idea.thoughts.length === 0 && <div style={{ textAlign: "center", padding: "40px 20px", color: C.foam, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.5 }}>這顆沙粒正在等待你的第一個想法<br/>寫下任何浮現的念頭吧 ✨</div>}
+      </div>
+      <div style={{ padding: "12px 16px 20px", background: `${C.sky1}cc`, backdropFilter: "blur(12px)", borderTop: `1px solid rgba(255,255,255,0.05)` }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", background: C.subtleBg, borderRadius: 16, padding: "4px 4px 4px 16px", border: `1px solid rgba(255,255,255,0.08)` }}>
+          <input type="text" placeholder="補充一個想法，讓珍珠長大..." value={newT} onChange={e => setNewT(e.target.value)} onKeyDown={e => e.key==="Enter"&&add()} style={{ flex: 1, background: "transparent", border: "none", color: C.moonlight, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", outline: "none", padding: "8px 0" }}/>
+          <button onClick={add} disabled={!newT.trim()} style={{ width: 36, height: 36, borderRadius: "50%", background: newT.trim()?"linear-gradient(135deg,#ffe0b240,#f5e6c830)":"rgba(255,255,255,0.05)", border: "none", cursor: newT.trim()?"pointer":"default", display: "flex", alignItems: "center", justifyContent: "center", color: newT.trim()?"#ffe0b2":`${C.foam}30`, transition: "all 0.3s", fontSize: 16 }}>✦</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Jellyfish ───
+const JellyfishGame = ({ C }) => {
+  const [phase, setPhase] = useState("idle");
+  const [count, setCount] = useState(0);
+  const [cycles, setCycles] = useState(0);
+  const [hue, setHue] = useState(0);
+  const tr = useRef(null);
+  const hueRef = useRef(null);
+
+  // Color shift animation
+  useEffect(() => {
+    hueRef.current = setInterval(() => setHue(h => (h + 0.5) % 360), 50);
+    return () => clearInterval(hueRef.current);
+  }, []);
+
+  const run = (c) => {
+    if (c >= 4) { setPhase("idle"); return; }
+    setPhase("inhale"); setCount(4); let s = 4;
+    tr.current = setInterval(() => { s--; if (s > 0) { setCount(s); return; } clearInterval(tr.current);
+      setPhase("hold"); setCount(4); let h = 4;
+      tr.current = setInterval(() => { h--; if (h > 0) { setCount(h); return; } clearInterval(tr.current);
+        setPhase("exhale"); setCount(4); let e = 4;
+        tr.current = setInterval(() => { e--; if (e > 0) { setCount(e); return; } clearInterval(tr.current);
+          setCycles(c + 1); run(c + 1);
+        }, 1000);
+      }, 1000);
+    }, 1000);
+  };
+  useEffect(() => () => clearInterval(tr.current), []);
+
+  const sz = phase === "inhale" ? 140 : phase === "hold" ? 140 : phase === "exhale" ? 70 : 100;
+  const bodyOp = phase === "inhale" ? 0.35 : phase === "exhale" ? 0.15 : 0.25;
+  const lb = phase === "inhale" ? "吸氣..." : phase === "hold" ? "屏息..." : phase === "exhale" ? "吐氣..." : "";
+
+  // Dynamic colors from hue rotation
+  const mainColor = `hsla(${hue}, 70%, 75%, ${bodyOp})`;
+  const edgeColor = `hsla(${(hue + 40) % 360}, 60%, 65%, ${bodyOp * 0.7})`;
+  const tentacleColor = `hsla(${(hue + 80) % 360}, 50%, 70%, ${bodyOp * 0.8})`;
+  const glowColor = `hsla(${hue}, 60%, 70%, ${bodyOp * 0.5})`;
+  const innerGlow = `hsla(${(hue + 20) % 360}, 80%, 85%, ${bodyOp * 0.6})`;
+
+  // Floating offset
+  const floatY = phase === "idle" ? 0 : phase === "inhale" ? -8 : phase === "exhale" ? 6 : -4;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 16 }}>
+      <div style={{ fontSize: 16, color: C.foam, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.8, textAlign: "center", whiteSpace: "pre-line" }}>
+        {phase === "idle" ? "跟著水母一起呼吸\n放鬆你的心" : `${lb} ${count}`}
+      </div>
+
+      {/* Jellyfish container with float animation */}
+      <div style={{
+        width: sz, height: sz * 1.3,
+        transition: "all 1.5s ease-in-out",
+        transform: `translateY(${floatY}px)`,
+        animation: phase === "idle" ? "jellyDrift 4s ease-in-out infinite" : undefined,
+        position: "relative",
+      }}>
+        {/* Outer glow */}
+        <div style={{
+          position: "absolute", inset: -20,
+          borderRadius: "50%",
+          background: `radial-gradient(ellipse at 50% 35%, ${glowColor}, transparent 70%)`,
+          transition: "all 1.5s ease-in-out",
+          filter: "blur(15px)",
+        }}/>
+
+        <svg viewBox="0 0 120 156" width="100%" height="100%" style={{ position: "relative", zIndex: 1 }}>
+          <defs>
+            {/* Transparent body gradient */}
+            <radialGradient id="jellyBody" cx="50%" cy="35%" r="50%">
+              <stop offset="0%" stopColor={innerGlow}/>
+              <stop offset="50%" stopColor={mainColor}/>
+              <stop offset="100%" stopColor={edgeColor}/>
+            </radialGradient>
+            {/* Rim light */}
+            <radialGradient id="jellyRim" cx="50%" cy="20%" r="60%">
+              <stop offset="0%" stopColor="transparent"/>
+              <stop offset="85%" stopColor="transparent"/>
+              <stop offset="100%" stopColor={`hsla(${hue}, 60%, 80%, ${bodyOp * 0.8})`}/>
+            </radialGradient>
+            {/* Inner organs glow */}
+            <radialGradient id="jellyInner" cx="50%" cy="45%" r="30%">
+              <stop offset="0%" stopColor={`hsla(${(hue + 60) % 360}, 80%, 80%, ${bodyOp * 0.5})`}/>
+              <stop offset="100%" stopColor="transparent"/>
+            </radialGradient>
+            {/* Tentacle gradient */}
+            <linearGradient id="tentGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={tentacleColor}/>
+              <stop offset="100%" stopColor="transparent"/>
+            </linearGradient>
+          </defs>
+
+          {/* Bell / dome - main body */}
+          <ellipse cx="60" cy="44" rx="42" ry="38" fill="url(#jellyBody)"/>
+          <ellipse cx="60" cy="44" rx="42" ry="38" fill="url(#jellyRim)"/>
+
+          {/* Inner structure - visible organs */}
+          <ellipse cx="60" cy="48" rx="18" ry="14" fill="url(#jellyInner)"/>
+
+          {/* Membrane veins */}
+          {[0, 1, 2, 3].map(i => (
+            <path key={`vein${i}`}
+              d={`M${36 + i * 16} ${30 + i * 3} Q${40 + i * 14} ${55 + i * 2} ${38 + i * 15} 72`}
+              stroke={`hsla(${(hue + i * 30) % 360}, 50%, 75%, ${bodyOp * 0.3})`}
+              strokeWidth="0.7" fill="none"
+            />
+          ))}
+
+          {/* Bell rim - ruffled edge */}
+          <path d={`M18 70 Q25 78 33 72 Q40 78 48 72 Q55 78 63 72 Q70 78 78 72 Q85 78 93 72 Q100 78 102 73`}
+            stroke={`hsla(${(hue + 20) % 360}, 65%, 75%, ${bodyOp * 1.2})`}
+            strokeWidth="1.5" fill="none"
+            style={{ animation: "ruffleWave 2s ease-in-out infinite" }}
+          />
+
+          {/* Tentacles - long flowing */}
+          {[28, 40, 52, 60, 68, 80, 92].map((x, i) => {
+            const len = 50 + (i % 3) * 15;
+            const sway = (i % 2 ? 12 : -12);
+            return (
+              <path key={`tent${i}`}
+                d={`M${x} 74 Q${x + sway} ${74 + len * 0.4} ${x - sway * 0.5} ${74 + len * 0.7} Q${x + sway * 0.3} ${74 + len * 0.9} ${x - sway * 0.2} ${74 + len}`}
+                stroke="url(#tentGrad)"
+                strokeWidth={1.2 - i * 0.05}
+                fill="none"
+                strokeLinecap="round"
+                style={{
+                  animation: `tentacleSway${i % 2} ${2.5 + i * 0.3}s ease-in-out ${i * 0.2}s infinite`,
+                  transformOrigin: `${x}px 74px`,
+                }}
+              />
+            );
+          })}
+
+          {/* Oral arms - center frilly tentacles */}
+          {[50, 57, 63, 70].map((x, i) => (
+            <path key={`oral${i}`}
+              d={`M${x} 72 Q${x + (i % 2 ? 5 : -5)} 90 ${x + (i % 2 ? -3 : 3)} 105 Q${x + (i % 2 ? 7 : -7)} 115 ${x} 125`}
+              stroke={`hsla(${(hue + 100 + i * 20) % 360}, 60%, 75%, ${bodyOp * 0.6})`}
+              strokeWidth="2"
+              fill="none"
+              strokeLinecap="round"
+              style={{
+                animation: `tentacleSway${i % 2} ${3 + i * 0.4}s ease-in-out ${i * 0.3}s infinite`,
+              }}
+            />
+          ))}
+
+          {/* Bioluminescent dots */}
+          {[
+            [45, 38], [55, 32], [65, 36], [75, 42], [50, 48], [70, 46],
+            [42, 50], [58, 42], [62, 52], [78, 38],
+          ].map(([cx, cy], i) => (
+            <circle key={`dot${i}`}
+              cx={cx} cy={cy}
+              r={0.8 + (i % 3) * 0.4}
+              fill={`hsla(${(hue + i * 36) % 360}, 80%, 85%, ${0.3 + Math.sin(hue / 30 + i) * 0.2})`}
+              style={{ transition: "fill 0.5s" }}
+            />
+          ))}
+
+          {/* Specular highlight on bell */}
+          <ellipse cx="50" cy="30" rx="14" ry="8"
+            fill={`hsla(0, 0%, 100%, ${bodyOp * 0.3})`}
+            filter="blur(3px)"
+          />
+        </svg>
+      </div>
+
+      <div style={{ color: C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif" }}>
+        {cycles > 0 && phase === "idle" ? `完成 ${cycles} 個循環 ✨` : cycles > 0 ? `第 ${cycles + 1}/4 個循環` : ""}
+      </div>
+      {phase === "idle" && (
+        <button onClick={() => { setCycles(0); run(0); }} style={{
+          background: C.inputBg, border: `1px solid ${C.foam}40`, borderRadius: 30,
+          padding: "12px 32px", color: C.foam, fontSize: 15, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer",
+        }}>開始呼吸練習</button>
+      )}
+    </div>
+  );
+};
+
+// ─── Bubbles ───
+const BubblePopGame = ({ C }) => {
+  const [bubbles, setBubbles] = useState([]);
+  const [score, setScore] = useState(0);
+  const [active, setActive] = useState(false);
+  const iv = useRef(null);
+  useEffect(() => {
+    if (!active) return;
+    iv.current = setInterval(() => {
+      setBubbles(p => {
+        const f = p.filter(b => Date.now()-b.born<3000);
+        if (f.length < 6) f.push({ id: Date.now()+Math.random(), x: 10+Math.random()*80, y: 10+Math.random()*70, size: 30+Math.random()*30, born: Date.now(), color: [C.foam,C.seaGlass,C.shell,C.coral][Math.floor(Math.random()*4)] });
+        return f;
+      });
+    }, 600);
+    return () => clearInterval(iv.current);
+  }, [active, C]);
+  if (!active) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 20 }}>
+      <div style={{ fontSize: 40 }}>🫧</div>
+      <div style={{ color: C.moonlight, fontSize: 16, fontFamily: "'Zen Maru Gothic', sans-serif", textAlign: "center" }}>戳破泡泡<br/>讓煩惱跟著消失</div>
+      {score > 0 && <div style={{ color: C.seaGlass, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif" }}>上次戳了 {score} 個泡泡 ✨</div>}
+      <button onClick={()=>{setScore(0);setBubbles([]);setActive(true);}} style={{ background: C.inputBg, border: `1px solid ${C.foam}40`, borderRadius: 30, padding: "12px 32px", color: C.foam, fontSize: 15, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer" }}>開始戳泡泡</button>
+    </div>
+  );
+  return (
+    <div style={{ position: "relative", height: "100%", overflow: "hidden" }}>
+      <div style={{ position: "absolute", top: 12, right: 16, color: C.foam, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", zIndex: 20 }}>🫧 {score}<button onClick={()=>setActive(false)} style={{ marginLeft: 12, background: "none", border: "none", color: C.foam, cursor: "pointer", fontSize: 13, opacity: 0.6 }}>結束</button></div>
+      {bubbles.map(b=><div key={b.id} onClick={()=>{setBubbles(p=>p.filter(x=>x.id!==b.id));setScore(s=>s+1);}} style={{ position: "absolute", left: `${b.x}%`, top: `${b.y}%`, width: b.size, height: b.size, borderRadius: "50%", background: `radial-gradient(circle at 30% 30%, ${b.color}40, ${b.color}15)`, border: `1px solid ${b.color}50`, cursor: "pointer", animation: "bubbleFloat 3s ease-out forwards" }}/>)}
+    </div>
+  );
+};
+
+// ─── Voice ───
+const VoiceTab = ({ onAddBottle, C }) => {
+  const [rec, setRec] = useState(false);
+  const [text, setText] = useState("");
+  const [manual, setManual] = useState(false);
+  const rr = useRef(null);
+  const startR = () => {
+    if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) { setManual(true); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const r = new SR(); r.lang = "zh-TW"; r.continuous = false; r.interimResults = true;
+    r.onresult = e => setText(Array.from(e.results).map(r => r[0].transcript).join(""));
+    r.onend = () => setRec(false);
+    r.onerror = () => { setRec(false); setManual(true); };
+    rr.current = r; r.start(); setRec(true); setText("");
+  };
+  const save = () => { if (!text.trim()) return; onAddBottle(text.trim(), "voice"); setText(""); };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 20, padding: 20 }}>
+      <div style={{ color: C.foam, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.7, textAlign: "center" }}>{rec ? "正在聽你說話..." : "對著海說出你想記住的事"}</div>
+      <div style={{ position: "relative", width: 120, height: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {rec && [0,1,2].map(i=><div key={i} style={{ position: "absolute", width: 120+i*30, height: 120+i*30, borderRadius: "50%", border: `1px solid ${C.foam}`, opacity: 0.15-i*0.04, animation: `ripple 2s ease-out ${i*0.5}s infinite` }}/>)}
+        <button onClick={rec ? ()=>{rr.current?.stop();setRec(false);} : startR} style={{
+          width: 80, height: 80, borderRadius: "50%",
+          background: rec ? `radial-gradient(circle, ${C.coral}50, ${C.coral}20)` : `radial-gradient(circle, ${C.foam}20, ${C.foam}08)`,
+          border: `2px solid ${rec ? C.coral+"60" : C.foam+"30"}`,
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: rec ? C.coral : C.foam, transition: "all 0.3s",
+        }}>{rec ? <div style={{ width: 24, height: 24, borderRadius: 4, background: C.coral }}/> : I.mic}</button>
+      </div>
+      {text && <div style={{ background: C.inputBg, borderRadius: 16, padding: "14px 18px", maxWidth: 300, width: "100%", border: `1px solid ${C.foam}20` }}>
+        <div style={{ color: C.moonlight, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", lineHeight: 1.5 }}>{text}</div>
+        <button onClick={save} style={{ marginTop: 10, background: `${C.seaGlass}25`, border: `1px solid ${C.seaGlass}40`, borderRadius: 20, padding: "8px 20px", color: C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", width: "100%" }}>放入漂流瓶 🍾</button>
+      </div>}
+      {manual && !rec && <div style={{ background: C.inputBg, borderRadius: 16, padding: "14px 18px", maxWidth: 300, width: "100%" }}>
+        <input type="text" placeholder="打字也可以..." value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${C.foam}30`, color: C.moonlight, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", padding: "8px 0", outline: "none" }}/>
+        {text && <button onClick={save} style={{ marginTop: 10, background: `${C.seaGlass}20`, border: `1px solid ${C.seaGlass}30`, borderRadius: 20, padding: "8px 20px", color: C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", width: "100%" }}>放入漂流瓶 🍾</button>}
+      </div>}
+      {!manual && !rec && !text && <button onClick={()=>setManual(true)} style={{ background: "none", border: "none", color: C.foam, opacity: 0.4, fontSize: 12, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer" }}>或是用打字的</button>}
+    </div>
+  );
+};
+
+// ─── Music section (used inside RelaxTab) ───
+const MusicSection = ({ C }) => {
+  const audio = useAmbientAudio();
+  const sounds = [
+    { id: "waves", emoji: "🌊", label: "海浪", desc: "潮起潮落的聲音" },
+    { id: "rain", emoji: "🌧️", label: "雨聲", desc: "輕柔的雨滴" },
+    { id: "melody", emoji: "🎵", label: "星光旋律", desc: "溫柔的音樂盒" },
+    { id: "night", emoji: "🦗", label: "夜晚", desc: "蟲鳴與微風" },
+  ];
+  return (
+    <div style={{ padding: "8px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+      {sounds.map(s=><button key={s.id} onClick={()=>audio.currentSound===s.id?audio.stop():audio.play(s.id)} style={{
+        display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
+        background: audio.currentSound===s.id ? C.inputBg : C.subtleBg,
+        border: `1px solid ${audio.currentSound===s.id ? C.foam+"50" : "rgba(255,255,255,0.06)"}`,
+        borderRadius: 14, cursor: "pointer", transition: "all 0.3s", width: "100%", textAlign: "left",
+      }}>
+        <span style={{ fontSize: 24 }}>{s.emoji}</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: C.moonlight, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", fontWeight: 500 }}>{s.label}</div>
+          <div style={{ color: C.foam, fontSize: 11, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.5, marginTop: 1 }}>{s.desc}</div>
+        </div>
+        {audio.currentSound===s.id && <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 16 }}>
+          {[0,1,2,3].map(i=><div key={i} style={{ width: 3, borderRadius: 2, background: C.foam, animation: `eqBar 0.8s ease-in-out ${i*0.15}s infinite alternate` }}/>)}
+        </div>}
+      </button>)}
+    </div>
+  );
+};
+
+// ─── Combined Relax Tab ───
+const RelaxTab = ({ C }) => {
+  const [mode, setMode] = useState("jellyfish");
+  const modes = [
+    { id: "jellyfish", label: "🪼 呼吸" },
+    { id: "bubbles", label: "🫧 泡泡" },
+    { id: "music", label: "🌊 海聲" },
+  ];
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", gap: 6, padding: "8px 16px", justifyContent: "center" }}>
+        {modes.map(m => (
+          <button key={m.id} onClick={() => setMode(m.id)} style={{
+            padding: "5px 14px", borderRadius: 18, background: mode === m.id ? C.inputBg : "transparent",
+            border: `1px solid ${mode === m.id ? C.foam + "40" : "transparent"}`,
+            color: mode === m.id ? C.moonlight : C.foam, opacity: mode === m.id ? 1 : 0.5,
+            fontSize: 12, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", transition: "all 0.3s",
+          }}>{m.label}</button>
+        ))}
+      </div>
+      <div style={{ flex: 1, overflow: "auto" }}>
+        {mode === "jellyfish" && <JellyfishGame C={C} />}
+        {mode === "bubbles" && <BubblePopGame C={C} />}
+        {mode === "music" && <MusicSection C={C} />}
+      </div>
+    </div>
+  );
+};
+
+// ─── Routine / Daily Checklist Tab ───
+const RoutineTab = ({ C }) => {
+  const [routines, setRoutines] = useState([
+    {
+      id: 1, title: "🚪 出門前確認", freq: "daily", icon: "🚪",
+      items: [
+        { id: 1, label: "鑰匙", checked: false, emoji: "🔑" },
+        { id: 2, label: "門禁卡", checked: false, emoji: "🪪" },
+        { id: 3, label: "悠遊卡", checked: false, emoji: "💳" },
+        { id: 4, label: "手機", checked: false, emoji: "📱" },
+        { id: 5, label: "錢包", checked: false, emoji: "👛" },
+      ],
+    },
+    {
+      id: 2, title: "🌙 睡前儀式", freq: "daily", icon: "🌙",
+      items: [
+        { id: 1, label: "充電手機", checked: false, emoji: "🔋" },
+        { id: 2, label: "準備明天的包包", checked: false, emoji: "🎒" },
+        { id: 3, label: "喝水", checked: false, emoji: "💧" },
+      ],
+    },
+    {
+      id: 3, title: "📦 每週整理", freq: "weekly", icon: "📦",
+      items: [
+        { id: 1, label: "整理桌面", checked: false, emoji: "🗂️" },
+        { id: 2, label: "洗衣服", checked: false, emoji: "👕" },
+        { id: 3, label: "倒垃圾", checked: false, emoji: "🗑️" },
+      ],
+    },
+  ]);
+  const [activeRoutine, setActiveRoutine] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newRoutineTitle, setNewRoutineTitle] = useState("");
+  const [newRoutineFreq, setNewRoutineFreq] = useState("daily");
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [newItemLabel, setNewItemLabel] = useState("");
+  const [newItemEmoji, setNewItemEmoji] = useState("✅");
+
+  const toggleItem = (routineId, itemId) => {
+    setRoutines(prev => prev.map(r => r.id === routineId ? {
+      ...r, items: r.items.map(it => it.id === itemId ? { ...it, checked: !it.checked } : it),
+    } : r));
+    if (activeRoutine?.id === routineId) {
+      setActiveRoutine(prev => ({
+        ...prev, items: prev.items.map(it => it.id === itemId ? { ...it, checked: !it.checked } : it),
+      }));
+    }
+  };
+
+  const resetRoutine = (routineId) => {
+    setRoutines(prev => prev.map(r => r.id === routineId ? {
+      ...r, items: r.items.map(it => ({ ...it, checked: false })),
+    } : r));
+    if (activeRoutine?.id === routineId) {
+      setActiveRoutine(prev => ({ ...prev, items: prev.items.map(it => ({ ...it, checked: false })) }));
+    }
+  };
+
+  const addRoutine = () => {
+    if (!newRoutineTitle.trim()) return;
+    const nr = { id: Date.now(), title: newRoutineTitle.trim(), freq: newRoutineFreq, icon: "📋", items: [] };
+    setRoutines(p => [...p, nr]);
+    setNewRoutineTitle(""); setShowAdd(false);
+    setActiveRoutine(nr);
+  };
+
+  const addItem = () => {
+    if (!newItemLabel.trim() || !activeRoutine) return;
+    const ni = { id: Date.now(), label: newItemLabel.trim(), checked: false, emoji: newItemEmoji || "✅" };
+    const updated = { ...activeRoutine, items: [...activeRoutine.items, ni] };
+    setRoutines(p => p.map(r => r.id === activeRoutine.id ? updated : r));
+    setActiveRoutine(updated);
+    setNewItemLabel(""); setNewItemEmoji("✅"); setShowAddItem(false);
+  };
+
+  const deleteRoutine = (id) => {
+    setRoutines(p => p.filter(r => r.id !== id));
+    setActiveRoutine(null);
+  };
+
+  const deleteItem = (itemId) => {
+    if (!activeRoutine) return;
+    const updated = { ...activeRoutine, items: activeRoutine.items.filter(it => it.id !== itemId) };
+    setRoutines(p => p.map(r => r.id === activeRoutine.id ? updated : r));
+    setActiveRoutine(updated);
+  };
+
+  const emojiOptions = ["✅", "🔑", "🪪", "💳", "📱", "👛", "🎒", "💊", "💧", "🧴", "👕", "🗂️", "🗑️", "🔋", "📒", "🐱", "🍱", "☂️", "😷", "🧹"];
+
+  // ─── Detail view ───
+  if (activeRoutine) {
+    const r = routines.find(x => x.id === activeRoutine.id) || activeRoutine;
+    const doneCount = r.items.filter(it => it.checked).length;
+    const total = r.items.length;
+    const allDone = total > 0 && doneCount === total;
+
+    return (
+      <div style={{ height: "100%", display: "flex", flexDirection: "column", animation: "fadeIn 0.3s ease-out" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", gap: 10 }}>
+          <button onClick={() => setActiveRoutine(null)} style={{ background: "none", border: "none", color: C.foam, cursor: "pointer", padding: 4 }}>{I.back}</button>
+          <div style={{ flex: 1 }}>
+            <div style={{ color: C.moonlight, fontSize: 16, fontFamily: "'Zen Maru Gothic', sans-serif", fontWeight: 500 }}>{r.title}</div>
+            <div style={{ color: C.foam, fontSize: 11, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.5, marginTop: 1 }}>
+              {r.freq === "daily" ? "每日" : "每週"} · {doneCount}/{total}
+            </div>
+          </div>
+          <button onClick={() => resetRoutine(r.id)} style={{
+            background: C.subtleBg, border: `1px solid ${C.foam}20`, borderRadius: 10,
+            padding: "5px 10px", color: C.foam, fontSize: 11, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", opacity: 0.6,
+          }}>重置</button>
+          <button onClick={() => deleteRoutine(r.id)} style={{
+            background: `${C.coral}15`, border: `1px solid ${C.coral}25`, borderRadius: 10,
+            padding: "5px 8px", color: C.coral, cursor: "pointer",
+          }}>{I.trash}</button>
+        </div>
+
+        {/* Progress */}
+        {total > 0 && <div style={{ padding: "0 16px 8px" }}>
+          <div style={{ height: 6, borderRadius: 3, background: C.subtleBg, overflow: "hidden" }}>
+            <div style={{
+              height: "100%", width: `${(doneCount/total)*100}%`, borderRadius: 3,
+              background: allDone
+                ? `linear-gradient(90deg, ${C.seaGlass}, ${C.seaGlass}cc)`
+                : `linear-gradient(90deg, ${C.foam}80, ${C.foam}cc)`,
+              transition: "width 0.4s ease-out",
+            }}/>
+          </div>
+          {allDone && <div style={{ textAlign: "center", marginTop: 8, fontSize: 13, color: C.seaGlass, fontFamily: "'Zen Maru Gothic', sans-serif" }}>
+            全部完成！做得好 🌟
+          </div>}
+        </div>}
+
+        {/* Items list */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+          {r.items.map((item, idx) => (
+            <div key={item.id} style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+              background: item.checked ? `${C.seaGlass}12` : C.subtleBg,
+              border: `1px solid ${item.checked ? C.seaGlass + "25" : C.foam + "10"}`,
+              borderRadius: 14, cursor: "pointer", transition: "all 0.3s",
+              animation: `fadeIn 0.25s ease-out ${idx * 0.04}s both`,
+            }} onClick={() => toggleItem(r.id, item.id)}>
+              {/* Custom checkbox */}
+              <div style={{
+                width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+                background: item.checked ? `${C.seaGlass}30` : "transparent",
+                border: `2px solid ${item.checked ? C.seaGlass : C.foam + "35"}`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "all 0.25s",
+              }}>
+                {item.checked && <svg viewBox="0 0 24 24" fill="none" stroke={C.seaGlass} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" width="16" height="16"><path d="M5 12l5 5L19 7"/></svg>}
+              </div>
+              <span style={{ fontSize: 20, flexShrink: 0 }}>{item.emoji}</span>
+              <span style={{
+                flex: 1, fontSize: 15, color: C.moonlight, fontFamily: "'Zen Maru Gothic', sans-serif",
+                opacity: item.checked ? 0.45 : 1, textDecoration: item.checked ? "line-through" : "none",
+                transition: "all 0.25s",
+              }}>{item.label}</span>
+              <button onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }} style={{
+                background: "none", border: "none", color: C.foam, opacity: 0.2, cursor: "pointer", padding: 2, fontSize: 14,
+              }}>✕</button>
+            </div>
+          ))}
+
+          {r.items.length === 0 && <div style={{
+            textAlign: "center", padding: "30px 20px", color: C.foam, fontSize: 14,
+            fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.5,
+          }}>還沒有項目，加一些吧 ✨</div>}
+        </div>
+
+        {/* Add item */}
+        {showAddItem ? (
+          <div style={{ padding: "10px 16px 16px", background: `${C.sky1}99`, backdropFilter: "blur(12px)", borderTop: `1px solid ${C.foam}10` }}>
+            {/* Emoji picker */}
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+              {emojiOptions.map(e => (
+                <button key={e} onClick={() => setNewItemEmoji(e)} style={{
+                  width: 32, height: 32, borderRadius: 8, fontSize: 16, cursor: "pointer", border: "none",
+                  background: newItemEmoji === e ? C.inputBg : "transparent",
+                  outline: newItemEmoji === e ? `2px solid ${C.foam}50` : "none",
+                }}>{e}</button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span style={{ fontSize: 22, flexShrink: 0 }}>{newItemEmoji}</span>
+              <input type="text" placeholder="項目名稱..." value={newItemLabel}
+                onChange={e => setNewItemLabel(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && addItem()}
+                autoFocus
+                style={{
+                  flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${C.foam}25`,
+                  color: C.moonlight, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", padding: "6px 0", outline: "none",
+                }}/>
+              <button onClick={addItem} disabled={!newItemLabel.trim()} style={{
+                padding: "6px 14px", borderRadius: 10, background: newItemLabel.trim() ? `${C.seaGlass}25` : C.subtleBg,
+                border: `1px solid ${newItemLabel.trim() ? C.seaGlass + "40" : C.foam + "10"}`,
+                color: newItemLabel.trim() ? C.seaGlass : C.foam, fontSize: 12, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer",
+              }}>加入</button>
+              <button onClick={() => { setShowAddItem(false); setNewItemLabel(""); }} style={{
+                background: "none", border: "none", color: C.foam, opacity: 0.5, cursor: "pointer", fontSize: 14,
+              }}>✕</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ padding: "10px 16px 16px" }}>
+            <button onClick={() => setShowAddItem(true)} style={{
+              width: "100%", padding: "10px", borderRadius: 14,
+              background: C.subtleBg, border: `1px dashed ${C.foam}25`,
+              color: C.foam, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif",
+              cursor: "pointer", opacity: 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            }}>+ 新增項目</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ─── Routine list view ───
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+        {routines.map((r, idx) => {
+          const doneCount = r.items.filter(it => it.checked).length;
+          const total = r.items.length;
+          const allDone = total > 0 && doneCount === total;
+          return (
+            <div key={r.id} onClick={() => setActiveRoutine(r)} style={{
+              background: allDone ? `${C.seaGlass}12` : C.subtleBg,
+              border: `1px solid ${allDone ? C.seaGlass + "25" : C.foam + "10"}`,
+              borderRadius: 18, padding: "16px 18px", cursor: "pointer",
+              transition: "all 0.3s", animation: `fadeIn 0.3s ease-out ${idx * 0.06}s both`,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: C.moonlight, fontSize: 16, fontFamily: "'Zen Maru Gothic', sans-serif", fontWeight: 500 }}>
+                    {r.title}
+                  </div>
+                  <div style={{ color: C.foam, fontSize: 11, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.5, marginTop: 2 }}>
+                    {r.freq === "daily" ? "每日" : "每週"} · {total > 0 ? `${doneCount}/${total}` : "無項目"}
+                  </div>
+                </div>
+                {allDone && <span style={{ fontSize: 20 }}>🌟</span>}
+              </div>
+              {/* Mini progress */}
+              {total > 0 && <div style={{ height: 4, borderRadius: 2, background: C.subtleBg, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", width: `${(doneCount/total)*100}%`, borderRadius: 2,
+                  background: allDone ? C.seaGlass : `${C.foam}80`,
+                  transition: "width 0.4s",
+                }}/>
+              </div>}
+              {/* Item preview pills */}
+              {total > 0 && <div style={{ display: "flex", gap: 4, marginTop: 8, flexWrap: "wrap" }}>
+                {r.items.map(it => (
+                  <span key={it.id} style={{
+                    fontSize: 11, padding: "3px 8px", borderRadius: 8,
+                    background: it.checked ? `${C.seaGlass}18` : `${C.foam}10`,
+                    color: it.checked ? C.seaGlass : C.foam,
+                    fontFamily: "'Zen Maru Gothic', sans-serif", opacity: it.checked ? 0.5 : 0.7,
+                    textDecoration: it.checked ? "line-through" : "none",
+                    transition: "all 0.25s",
+                  }}>{it.emoji} {it.label}</span>
+                ))}
+              </div>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add routine */}
+      {showAdd ? (
+        <div style={{
+          padding: "12px 16px 16px", background: `${C.sky1}99`, backdropFilter: "blur(12px)",
+          borderTop: `1px solid ${C.foam}10`, animation: "fadeIn 0.2s ease-out",
+        }}>
+          <input type="text" placeholder="清單名稱，例如：出門前確認" value={newRoutineTitle}
+            onChange={e => setNewRoutineTitle(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") addRoutine(); if (e.key === "Escape") { setShowAdd(false); setNewRoutineTitle(""); } }}
+            autoFocus
+            style={{
+              width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${C.foam}25`,
+              color: C.moonlight, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", padding: "6px 0 10px", outline: "none",
+            }}/>
+          <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 4 }}>
+              {["daily", "weekly"].map(f => (
+                <button key={f} onClick={() => setNewRoutineFreq(f)} style={{
+                  padding: "4px 12px", borderRadius: 10, fontSize: 12,
+                  background: newRoutineFreq === f ? C.inputBg : "transparent",
+                  border: `1px solid ${newRoutineFreq === f ? C.foam + "40" : C.foam + "15"}`,
+                  color: newRoutineFreq === f ? C.moonlight : C.foam, opacity: newRoutineFreq === f ? 1 : 0.5,
+                  fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer",
+                }}>{f === "daily" ? "每日" : "每週"}</button>
+              ))}
+            </div>
+            <div style={{ flex: 1 }}/>
+            <button onClick={() => { setShowAdd(false); setNewRoutineTitle(""); }} style={{
+              padding: "6px 12px", borderRadius: 10, background: C.subtleBg, border: `1px solid ${C.foam}15`,
+              color: C.foam, fontSize: 12, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", opacity: 0.6,
+            }}>取消</button>
+            <button onClick={addRoutine} style={{
+              padding: "6px 14px", borderRadius: 10, background: `${C.seaGlass}25`, border: `1px solid ${C.seaGlass}40`,
+              color: C.seaGlass, fontSize: 12, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer",
+            }}>建立</button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ padding: "10px 16px 16px" }}>
+          <button onClick={() => setShowAdd(true)} style={{
+            width: "100%", padding: "11px", borderRadius: 14,
+            background: C.subtleBg, border: `1px dashed ${C.foam}25`,
+            color: C.foam, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif",
+            cursor: "pointer", opacity: 0.6, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          }}>+ 新增日常清單</button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ━━━ MAIN APP ━━━
+function DriftBottleApp() {
+  const { colors: C, period, isDay, hour } = useTimeTheme();
+  const [tab, setTab] = useState(0);
+  const [bottles, setBottles] = useState([
+    { id: 1, text: "明天下午三點牙醫", time: "剛剛", done: false, type: "voice" },
+    { id: 2, text: "買貓糧", time: "1小時前", done: false, type: "text" },
+    { id: 3, text: "回覆小美的訊息", time: "今早", done: true, type: "text" },
+  ]);
+  const [ideas, setIdeas] = useState([
+    { id: 101, title: "寫一首關於海的歌", thoughts: [{ text: "副歌想用「潮汐」當意象", time: "2天前" }, { text: "可以加入 lo-fi beat", time: "昨天" }, { text: "開頭用海浪的取樣音效", time: "今早" }] },
+    { id: 102, title: "App 的新功能靈感", thoughts: [{ text: "加入每日一句海的訊息", time: "3天前" }] },
+    { id: 103, title: "送朋友的生日禮物", thoughts: [] },
+  ]);
+  const [showInput, setShowInput] = useState(false);
+  const [newText, setNewText] = useState("");
+  const [selBottle, setSelBottle] = useState(null);
+  const [selIdea, setSelIdea] = useState(null);
+  const [showNewIdea, setShowNewIdea] = useState(false);
+  const [newIdeaTitle, setNewIdeaTitle] = useState("");
+
+  const addBottle = (text, type = "text") => { setBottles(p => [{ id: Date.now(), text, time: "剛剛", done: false, type }, ...p]); setShowInput(false); setNewText(""); setTab(0); };
+  const toggleDone = id => { setBottles(p => p.map(b => b.id === id ? { ...b, done: !b.done } : b)); setSelBottle(null); };
+  const delBottle = id => { setBottles(p => p.filter(b => b.id !== id)); setSelBottle(null); };
+  const addIdea = () => { if (!newIdeaTitle.trim()) return; setIdeas(p => [...p, { id: Date.now(), title: newIdeaTitle.trim(), thoughts: [] }]); setNewIdeaTitle(""); setShowNewIdea(false); };
+
+  const tabs = [
+    { icon: I.bottle, label: "漂流瓶" },
+    { icon: I.mic, label: "語音" },
+    { icon: I.routine, label: "日常" },
+    { icon: I.pearl, label: "靈感" },
+    { icon: I.relax, label: "放鬆" },
+  ];
+
+  return (
+    <div style={{
+      width: "100%", maxWidth: 420, height: "100vh", maxHeight: 780, margin: "0 auto",
+      background: `linear-gradient(180deg, ${C.sky1} 0%, ${C.sky2} 40%, ${C.sky3} 100%)`,
+      display: "flex", flexDirection: "column", position: "relative", overflow: "hidden",
+      fontFamily: "'Zen Maru Gothic', sans-serif", borderRadius: 20,
+      transition: "background 2s ease",
+    }}>
+      <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+      <style>{`
+        @keyframes floatBottle{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-12px) rotate(3deg)}}
+        @keyframes pearlFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+        @keyframes pearlPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
+        @keyframes sparkleRotate{0%{transform:rotate(0) scale(1)}50%{transform:rotate(180deg) scale(1.3)}100%{transform:rotate(360deg) scale(1)}}
+        @keyframes ripple{0%{transform:scale(.8);opacity:.3}100%{transform:scale(1.5);opacity:0}}
+        @keyframes eqBar{0%{height:4px}100%{height:16px}}
+        @keyframes bubbleFloat{0%{opacity:0;transform:scale(.5)}20%{opacity:1;transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:scale(.3) translateY(-30px)}}
+        @keyframes tentacleWave{0%,100%{transform:translateX(0)}50%{transform:translateX(3px)}}
+        @keyframes tentacleSway0{0%,100%{transform:rotate(0deg)}50%{transform:rotate(4deg)}}
+        @keyframes tentacleSway1{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-4deg)}}
+        @keyframes jellyDrift{0%,100%{transform:translateY(0) rotate(-1deg)}25%{transform:translateY(-10px) rotate(1deg)}50%{transform:translateY(-5px) rotate(-0.5deg)}75%{transform:translateY(-12px) rotate(0.5deg)}}
+        @keyframes ruffleWave{0%,100%{transform:translateY(0)}50%{transform:translateY(2px)}}
+        @keyframes moonGlow{0%,100%{opacity:.6;filter:blur(20px)}50%{opacity:.9;filter:blur(30px)}}
+        @keyframes waveMove{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes sunRay{0%{opacity:.2;height:16px}100%{opacity:.45;height:22px}}
+        @keyframes cloudDrift{0%{transform:translateX(0)}100%{transform:translateX(30px)}}
+      `}</style>
+
+      {/* Celestial */}
+      <Celestial type={C.celestial} colors={C} />
+
+      {/* Stars (fade by time) */}
+      {C.starOpacity > 0 && Array.from({ length: 20 }).map((_, i) => (
+        <div key={i} style={{
+          position: "absolute", left: `${5+(i*17)%90}%`, top: `${3+(i*13)%25}%`,
+          width: i%3===0?2:1, height: i%3===0?2:1, borderRadius: "50%",
+          background: C.moonlight, opacity: C.starOpacity * (0.3+(i%4)*0.15),
+          animation: `moonGlow ${3+i%4}s ease-in-out ${i*0.5}s infinite`, zIndex: 1,
+          transition: "opacity 2s",
+        }}/>
+      ))}
+
+      {/* Day clouds */}
+      {isDay && [0,1,2].map(i => (
+        <div key={i} style={{
+          position: "absolute", top: 18 + i * 24, left: `${8 + i * 30}%`,
+          width: 50 + i * 18, height: 14 + i * 3, borderRadius: 20,
+          background: "rgba(255,255,255,0.25)",
+          filter: "blur(8px)",
+          animation: `cloudDrift ${14 + i * 6}s ease-in-out ${i * 3}s infinite alternate`,
+          zIndex: 1,
+        }}/>
+      ))}
+
+      {/* Header */}
+      <div style={{ padding: "50px 24px 12px", zIndex: 10, textAlign: "center" }}>
+        <h1 style={{ fontSize: 22, fontWeight: 500, color: C.moonlight, margin: 0, letterSpacing: 2, transition: "color 2s" }}>漂流瓶</h1>
+        <p style={{ fontSize: 12, color: C.foam, opacity: 0.6, margin: "4px 0 0", transition: "color 2s" }}>{getGreeting(hour)}</p>
+      </div>
+
+      {/* Wave deco */}
+      <div style={{ position: "absolute", bottom: 58, left: 0, right: 0, height: 30, overflow: "hidden", zIndex: 2, opacity: 0.3 }}>
+        <div style={{ animation: "waveMove 8s linear infinite", width: "200%", display: "flex" }}>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <svg key={i} viewBox="0 0 120 20" width="120" height="20" fill="none">
+              <path d="M0 10 Q15 0 30 10 Q45 20 60 10 Q75 0 90 10 Q105 20 120 10" stroke={C.foam} strokeWidth="1.5" opacity="0.4"/>
+            </svg>
+          ))}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, position: "relative", overflow: "hidden", zIndex: 5 }}>
+
+        {/* Tab 0: Bottles */}
+        {tab === 0 && (
+          <div style={{ height: "100%", position: "relative" }}>
+            {bottles.length === 0 ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 16 }}><div style={{ fontSize: 40, opacity: 0.4 }}>🌊</div><div style={{ color: C.foam, opacity: 0.5, fontSize: 14 }}>海面很平靜，還沒有漂流瓶</div></div>
+              : bottles.map((b, i) => <FloatingBottle key={b.id} bottle={b} index={i} onClick={setSelBottle} C={C} />)}
+
+            <button onClick={() => setShowInput(true)} style={{
+              position: "absolute", bottom: 16, right: 16, width: 52, height: 52, borderRadius: "50%",
+              background: `linear-gradient(135deg, ${C.seaGlass}40, ${C.foam}30)`,
+              border: `1px solid ${C.foam}30`, cursor: "pointer", display: "flex", alignItems: "center",
+              justifyContent: "center", color: C.moonlight, boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+              backdropFilter: "blur(8px)", zIndex: 20,
+            }}>{I.plus}</button>
+
+            {showInput && <div style={{
+              position: "absolute", bottom: 80, left: 16, right: 16, background: C.panelBg,
+              backdropFilter: "blur(20px)", borderRadius: 20, padding: 18, border: `1px solid ${C.foam}20`,
+              zIndex: 30, animation: "fadeIn 0.3s ease-out",
+            }}>
+              <input autoFocus type="text" placeholder="想記住什麼？寫下來丟進海裡..." value={newText}
+                onChange={e => setNewText(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && newText.trim()) addBottle(newText.trim()); if (e.key === "Escape") { setShowInput(false); setNewText(""); } }}
+                style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${C.foam}25`, color: C.moonlight, fontSize: 15, fontFamily: "'Zen Maru Gothic', sans-serif", padding: "8px 0 12px", outline: "none" }}/>
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <button onClick={() => { setShowInput(false); setNewText(""); }} style={{ flex: 1, padding: 8, borderRadius: 12, background: C.subtleBg, border: `1px solid ${C.foam}18`, color: C.foam, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", opacity: 0.7 }}>取消</button>
+                <button onClick={() => newText.trim() && addBottle(newText.trim())} style={{ flex: 1, padding: 8, borderRadius: 12, background: `${C.seaGlass}25`, border: `1px solid ${C.seaGlass}40`, color: C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer" }}>丟入海中 🍾</button>
+              </div>
+            </div>}
+
+            {selBottle && <div onClick={() => setSelBottle(null)} style={{
+              position: "absolute", inset: 0, background: C.overlayBg, backdropFilter: "blur(12px)",
+              display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, animation: "fadeIn 0.2s ease-out",
+            }}>
+              <div onClick={e => e.stopPropagation()} style={{
+                background: C.panelBg, borderRadius: 24, padding: 28, maxWidth: 300, width: "85%",
+                border: `1px solid ${C.foam}20`, textAlign: "center",
+              }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>🍾</div>
+                <div style={{ color: C.moonlight, fontSize: 17, lineHeight: 1.6, marginBottom: 6, textDecoration: selBottle.done ? "line-through" : "none", opacity: selBottle.done ? 0.5 : 1 }}>{selBottle.text}</div>
+                <div style={{ color: C.foam, fontSize: 12, opacity: 0.5, marginBottom: 20 }}>{selBottle.type === "voice" ? "🎙️ 語音" : "✉️ 文字"} · {selBottle.time}</div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button onClick={() => toggleDone(selBottle.id)} style={{ flex: 1, padding: 10, borderRadius: 14, background: selBottle.done ? C.subtleBg : `${C.seaGlass}20`, border: `1px solid ${selBottle.done ? "rgba(255,255,255,0.1)" : C.seaGlass + "40"}`, color: selBottle.done ? C.foam : C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{selBottle.done ? "未完成" : <>{I.check} 完成</>}</button>
+                  <button onClick={() => delBottle(selBottle.id)} style={{ padding: "10px 14px", borderRadius: 14, background: `${C.coral}18`, border: `1px solid ${C.coral}30`, color: C.coral, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>{I.trash}</button>
+                </div>
+              </div>
+            </div>}
+          </div>
+        )}
+
+        {tab === 1 && <VoiceTab onAddBottle={addBottle} C={C} />}
+
+        {/* Tab 2: Routine */}
+        {tab === 2 && <RoutineTab C={C} />}
+
+        {/* Tab 3: Ideas */}
+        {tab === 3 && (
+          <div style={{ height: "100%", position: "relative" }}>
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "30%", background: "linear-gradient(180deg, transparent 0%, rgba(245,230,200,0.04) 100%)", pointerEvents: "none" }}/>
+            {ideas.length === 0 ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 16 }}><div style={{ fontSize: 40, opacity: 0.4 }}>✨</div><div style={{ color: C.foam, opacity: 0.5, fontSize: 14, textAlign: "center" }}>海底還沒有珍珠<br/>記下你的第一個靈感吧</div></div>
+              : ideas.map((idea, i) => <PearlOrb key={idea.id} idea={idea} index={i} onClick={setSelIdea} />)}
+            <button onClick={() => setShowNewIdea(true)} style={{
+              position: "absolute", bottom: 16, right: 16, width: 52, height: 52, borderRadius: "50%",
+              background: "linear-gradient(135deg, #ffe0b230, #f5e6c820)",
+              border: "1px solid #ffe0b230", cursor: "pointer", display: "flex", alignItems: "center",
+              justifyContent: "center", color: "#ffe0b2", boxShadow: "0 4px 20px rgba(0,0,0,0.3), 0 0 15px #ffe0b215",
+              backdropFilter: "blur(8px)", zIndex: 20, fontSize: 20,
+            }}>✦</button>
+            {showNewIdea && <div style={{
+              position: "absolute", bottom: 80, left: 16, right: 16, background: C.panelBg,
+              backdropFilter: "blur(20px)", borderRadius: 20, padding: 18, border: "1px solid #ffe0b220",
+              zIndex: 30, animation: "fadeIn 0.3s ease-out",
+            }}>
+              <div style={{ fontSize: 12, color: "#ffe0b2", opacity: 0.6, marginBottom: 8 }}>✨ 一顆新的珍珠將在海底誕生</div>
+              <input autoFocus type="text" placeholder="這個靈感叫什麼？" value={newIdeaTitle} onChange={e => setNewIdeaTitle(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addIdea(); if (e.key === "Escape") { setShowNewIdea(false); setNewIdeaTitle(""); } }}
+                style={{ width: "100%", background: "transparent", border: "none", borderBottom: "1px solid #ffe0b230", color: C.moonlight, fontSize: 15, fontFamily: "'Zen Maru Gothic', sans-serif", padding: "8px 0 12px", outline: "none" }}/>
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <button onClick={() => { setShowNewIdea(false); setNewIdeaTitle(""); }} style={{ flex: 1, padding: 8, borderRadius: 12, background: C.subtleBg, border: "1px solid rgba(255,255,255,0.1)", color: C.foam, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", opacity: 0.6 }}>取消</button>
+                <button onClick={addIdea} style={{ flex: 1, padding: 8, borderRadius: 12, background: "#ffe0b220", border: "1px solid #ffe0b235", color: "#ffe0b2", fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer" }}>種下珍珠 ✦</button>
+              </div>
+            </div>}
+            {selIdea && <IdeaDetail idea={selIdea} onClose={() => setSelIdea(null)} onUpdate={u => { setIdeas(p => p.map(i => i.id === u.id ? u : i)); setSelIdea(u); }} onDelete={id => { setIdeas(p => p.filter(i => i.id !== id)); setSelIdea(null); }} C={C} />}
+          </div>
+        )}
+
+        {tab === 4 && <RelaxTab C={C} />}
+      </div>
+
+      {/* Tab Bar */}
+      <div style={{
+        display: "flex", justifyContent: "space-around", alignItems: "center", padding: "8px 0 16px",
+        background: C.tabBg, backdropFilter: "blur(20px)", borderTop: `1px solid ${C.tabBorder}`,
+        zIndex: 20, position: "relative", transition: "background 2s",
+      }}>
+        {tabs.map((t, i) => (
+          <button key={i} onClick={() => setTab(i)} style={{
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+            background: "none", border: "none", cursor: "pointer",
+            color: tab === i ? (i === 3 ? "#ffe0b2" : C.moonlight) : C.foam,
+            opacity: tab === i ? 1 : 0.35, transition: "all 0.3s", padding: "4px 8px",
+          }}>
+            <div style={{ transform: tab === i ? "scale(1.15)" : "scale(1)", transition: "transform 0.3s" }}>{t.icon}</div>
+            <span style={{ fontSize: 10 }}>{t.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(DriftBottleApp));
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
