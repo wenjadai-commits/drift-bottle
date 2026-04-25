@@ -229,7 +229,7 @@ const getGreeting = (hour) => {
 // ─── FloatingBottle ───
 const FloatingBottle = ({ bottle, index, onClick, C }) => {
   const yOff = 30 + (index % 3) * 18;
-  const xPos = 10 + ((index * 37) % 80);
+  const xPos = 8 + ((index * 37) % 58); // max ~66%, 留右側空間給卡片寬度
   const delay = index * 0.7;
   const dur = 4 + (index % 3) * 1.2;
   const textColor = C.cardText || C.moonlight;
@@ -1112,7 +1112,7 @@ function DriftBottleApp() {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, position: "relative", overflow: "hidden", zIndex: 5 }}>
+      <div style={{ flex: 1, position: "relative", overflow: "visible", zIndex: 5 }}>
 
         {/* Tab 0: Bottles */}
         {tab === 0 && (
