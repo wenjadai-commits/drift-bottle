@@ -1,4 +1,4 @@
-const CACHE_NAME = 'driftbottle-v1';
+const CACHE_NAME = 'driftbottle-v2';
 const ASSETS = [
   './',
   './index.html',

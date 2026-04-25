@@ -1041,7 +1041,7 @@ function DriftBottleApp() {
 
   return (
     <div style={{
-      width: "100%", maxWidth: 420, height: "100vh", maxHeight: 780, margin: "0 auto",
+      width: "100%", maxWidth: 420, height: "100dvh", margin: "0 auto",
       background: `linear-gradient(180deg, ${C.sky1} 0%, ${C.sky2} 40%, ${C.sky3} 100%)`,
       display: "flex", flexDirection: "column", position: "relative", overflow: "hidden",
       fontFamily: "'Zen Maru Gothic', sans-serif", borderRadius: 20,
@@ -1204,7 +1204,8 @@ function DriftBottleApp() {
 
       {/* Tab Bar */}
       <div style={{
-        display: "flex", justifyContent: "space-around", alignItems: "center", padding: "8px 0 16px",
+        display: "flex", justifyContent: "space-around", alignItems: "center",
+        padding: "8px 0 calc(16px + env(safe-area-inset-bottom, 0px))",
         background: C.tabBg, backdropFilter: "blur(20px)", borderTop: `1px solid ${C.tabBorder}`,
         zIndex: 20, position: "relative", transition: "background 2s",
       }}>
