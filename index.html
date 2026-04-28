@@ -1097,8 +1097,10 @@ function DriftBottleApp() {
     setSelBottle(null);
   };
   const delBottle = id => {
-    setBottles(p => { const next = p.filter(b => b.id !== id); syncToCloud(next, routines, ideas); return next; });
-    setSelBottle(null);
+    setSelBottle(null); // 先關 overlay
+    setTimeout(() => {  // 等下一個 render cycle 再刪
+      setBottles(p => { const next = p.filter(b => b.id !== id); syncToCloud(next, routines, ideas); return next; });
+    }, 0);
   };
   const addIdea = () => { if (!newIdeaTitle.trim()) return; setIdeas(p => [...p, { id: Date.now(), title: newIdeaTitle.trim(), thoughts: [] }]); setNewIdeaTitle(""); setShowNewIdea(false); };
 
@@ -1353,7 +1355,7 @@ function DriftBottleApp() {
               </div>
             </div>}
 
-            {selBottle && bottles.some(b => b.id === selBottle.id) && <div onClick={() => setSelBottle(null)} style={{
+            {selBottle && <div onClick={() => setSelBottle(null)} style={{
               position: "absolute", inset: 0, background: C.overlayBg, backdropFilter: "blur(12px)",
               display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, animation: "fadeIn 0.2s ease-out",
             }}>
