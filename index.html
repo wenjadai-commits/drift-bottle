@@ -170,38 +170,23 @@ const I = {
 const Celestial = ({ type, colors }) => {
   if (type === "sun") return (
     <div style={{ position: "absolute", top: 28, right: 38, zIndex: 1 }}>
-      {/* Sun rays */}
-      {[0,1,2,3,4,5,6,7].map(i => <div key={i} style={{
-        position: "absolute", top: 25, left: 25, width: 2, height: 14, borderRadius: 1,
-        background: "#f0c870", opacity: 0.25, transformOrigin: "50% 0%",
-        transform: `rotate(${i*45}deg) translateY(-34px)`,
-        animation: `sunRay 3s ease-in-out ${i*0.3}s infinite alternate`,
-      }}/>)}
-      <div style={{
-        width: 50, height: 50, borderRadius: "50%",
-        background: "radial-gradient(circle at 40% 35%, #FFF8E8, #F5D080, #E8B850)",
-        boxShadow: "0 0 40px rgba(240,200,100,0.35), 0 0 80px rgba(232,184,80,0.15)",
-      }}/>
+      <img src="./sun.png" alt="sun" style={{ width: 60, height: 60, objectFit: "contain", filter: "drop-shadow(0 0 12px rgba(240,200,100,0.5))" }}
+        onError={e => { e.target.style.display="none"; }}
+      />
     </div>
   );
   if (type === "sunrise") return (
     <div style={{ position: "absolute", top: 35, right: 38, zIndex: 1 }}>
-      <div style={{
-        width: 46, height: 46, borderRadius: "50%",
-        background: "radial-gradient(circle at 40% 40%, #FFECD2, #FFA07A, #FF6347)",
-        boxShadow: "0 0 40px rgba(255,160,122,0.5), 0 0 80px rgba(255,99,71,0.2)",
-        animation: "moonGlow 5s ease-in-out infinite",
-      }}/>
+      <img src="./sun.png" alt="sunrise" style={{ width: 56, height: 56, objectFit: "contain", filter: "drop-shadow(0 0 12px rgba(255,160,122,0.5))" }}
+        onError={e => { e.target.style.display="none"; }}
+      />
     </div>
   );
   if (type === "sunset") return (
     <div style={{ position: "absolute", top: 32, right: 38, zIndex: 1 }}>
-      <div style={{
-        width: 48, height: 48, borderRadius: "50%",
-        background: "radial-gradient(circle at 35% 35%, #FFD4A0, #E87040, #A03050)",
-        boxShadow: "0 0 40px rgba(232,112,64,0.4), 0 0 80px rgba(160,48,80,0.2)",
-        animation: "moonGlow 6s ease-in-out infinite",
-      }}/>
+      <img src="./sun.png" alt="sunset" style={{ width: 58, height: 58, objectFit: "contain", filter: "drop-shadow(0 0 12px rgba(232,112,64,0.5))" }}
+        onError={e => { e.target.style.display="none"; }}
+      />
     </div>
   );
   // moon
@@ -229,7 +214,7 @@ const getGreeting = (hour) => {
 // ─── FloatingBottle ───
 const FloatingBottle = ({ bottle, index, onClick, C }) => {
   const yOff = 30 + (index % 3) * 18;
-  const xPos = 8 + ((index * 37) % 58); // max ~66%, 留右側空間給卡片寬度
+  const xPos = 8 + ((index * 37) % 55); // max ~63%, 卡片寬度約160px, 63%+160px < 100%
   const delay = index * 0.7;
   const dur = 4 + (index % 3) * 1.2;
   const textColor = C.cardText || C.moonlight;
@@ -239,12 +224,13 @@ const FloatingBottle = ({ bottle, index, onClick, C }) => {
     <div onClick={() => onClick(bottle)} style={{
       position: "absolute", left: `${xPos}%`, top: `${yOff}%`, cursor: "pointer",
       animation: `floatBottle ${dur}s ease-in-out ${delay}s infinite`, zIndex: 10,
+      maxWidth: "calc(100% - 24px)",
     }}>
       <div style={{
         background: C.cardBg,
         backdropFilter: "blur(6px)", borderRadius: 14, padding: "10px 16px",
         border: `1px solid ${C.cardBorder}`,
-        maxWidth: 180, minWidth: 80, boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+        maxWidth: 160, minWidth: 80, boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
         opacity: bottle.done ? 0.55 : 1,
       }}>
         <div style={{ fontSize: 11, color: subColor, opacity: 0.6, marginBottom: 4, fontFamily: "'Zen Maru Gothic', sans-serif" }}>
@@ -434,7 +420,18 @@ const JellyfishGame = ({ C }) => {
           filter: "blur(15px)",
         }}/>
 
-        <svg viewBox="0 0 120 156" width="100%" height="100%" style={{ position: "relative", zIndex: 1 }}>
+        {/* 水母圖片 - 放 jellyfish.png 在同目錄即可替換 */}
+        <img src="./jellyfish.png" alt="jellyfish"
+          style={{
+            width: "100%", height: "100%", objectFit: "contain",
+            position: "relative", zIndex: 1,
+            filter: `hue-rotate(${hue}deg) drop-shadow(0 0 12px hsla(${hue},60%,70%,0.5))`,
+            transition: "all 1.5s ease-in-out",
+          }}
+          onError={e => { e.target.style.display="none"; e.target.nextSibling.style.display="block"; }}
+        />
+        {/* SVG fallback（圖片載入失敗時顯示） */}
+        <svg viewBox="0 0 120 156" width="100%" height="100%" style={{ position: "relative", zIndex: 1, display: "none" }}>
           <defs>
             {/* Transparent body gradient */}
             <radialGradient id="jellyBody" cx="50%" cy="35%" r="50%">
@@ -579,48 +576,6 @@ const BubblePopGame = ({ C }) => {
     <div style={{ position: "relative", height: "100%", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: 12, right: 16, color: C.foam, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", zIndex: 20 }}>🫧 {score}<button onClick={()=>setActive(false)} style={{ marginLeft: 12, background: "none", border: "none", color: C.foam, cursor: "pointer", fontSize: 13, opacity: 0.6 }}>結束</button></div>
       {bubbles.map(b=><div key={b.id} onClick={()=>{setBubbles(p=>p.filter(x=>x.id!==b.id));setScore(s=>s+1);}} style={{ position: "absolute", left: `${b.x}%`, top: `${b.y}%`, width: b.size, height: b.size, borderRadius: "50%", background: `radial-gradient(circle at 30% 30%, ${b.color}40, ${b.color}15)`, border: `1px solid ${b.color}50`, cursor: "pointer", animation: "bubbleFloat 3s ease-out forwards" }}/>)}
-    </div>
-  );
-};
-
-// ─── Voice ───
-const VoiceTab = ({ onAddBottle, C }) => {
-  const [rec, setRec] = useState(false);
-  const [text, setText] = useState("");
-  const [manual, setManual] = useState(false);
-  const rr = useRef(null);
-  const startR = () => {
-    if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) { setManual(true); return; }
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const r = new SR(); r.lang = "zh-TW"; r.continuous = false; r.interimResults = true;
-    r.onresult = e => setText(Array.from(e.results).map(r => r[0].transcript).join(""));
-    r.onend = () => setRec(false);
-    r.onerror = () => { setRec(false); setManual(true); };
-    rr.current = r; r.start(); setRec(true); setText("");
-  };
-  const save = () => { if (!text.trim()) return; onAddBottle(text.trim(), "voice"); setText(""); };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 20, padding: 20 }}>
-      <div style={{ color: C.foam, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.7, textAlign: "center" }}>{rec ? "正在聽你說話..." : "對著海說出你想記住的事"}</div>
-      <div style={{ position: "relative", width: 120, height: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {rec && [0,1,2].map(i=><div key={i} style={{ position: "absolute", width: 120+i*30, height: 120+i*30, borderRadius: "50%", border: `1px solid ${C.foam}`, opacity: 0.15-i*0.04, animation: `ripple 2s ease-out ${i*0.5}s infinite` }}/>)}
-        <button onClick={rec ? ()=>{rr.current?.stop();setRec(false);} : startR} style={{
-          width: 80, height: 80, borderRadius: "50%",
-          background: rec ? `radial-gradient(circle, ${C.coral}50, ${C.coral}20)` : `radial-gradient(circle, ${C.foam}20, ${C.foam}08)`,
-          border: `2px solid ${rec ? C.coral+"60" : C.foam+"30"}`,
-          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: rec ? C.coral : C.foam, transition: "all 0.3s",
-        }}>{rec ? <div style={{ width: 24, height: 24, borderRadius: 4, background: C.coral }}/> : I.mic}</button>
-      </div>
-      {text && <div style={{ background: C.inputBg, borderRadius: 16, padding: "14px 18px", maxWidth: 300, width: "100%", border: `1px solid ${C.foam}20` }}>
-        <div style={{ color: C.moonlight, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", lineHeight: 1.5 }}>{text}</div>
-        <button onClick={save} style={{ marginTop: 10, background: `${C.seaGlass}25`, border: `1px solid ${C.seaGlass}40`, borderRadius: 20, padding: "8px 20px", color: C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", width: "100%" }}>放入漂流瓶 🍾</button>
-      </div>}
-      {manual && !rec && <div style={{ background: C.inputBg, borderRadius: 16, padding: "14px 18px", maxWidth: 300, width: "100%" }}>
-        <input type="text" placeholder="打字也可以..." value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${C.foam}30`, color: C.moonlight, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", padding: "8px 0", outline: "none" }}/>
-        {text && <button onClick={save} style={{ marginTop: 10, background: `${C.seaGlass}20`, border: `1px solid ${C.seaGlass}30`, borderRadius: 20, padding: "8px 20px", color: C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", width: "100%" }}>放入漂流瓶 🍾</button>}
-      </div>}
-      {!manual && !rec && !text && <button onClick={()=>setManual(true)} style={{ background: "none", border: "none", color: C.foam, opacity: 0.4, fontSize: 12, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer" }}>或是用打字的</button>}
     </div>
   );
 };
@@ -1026,14 +981,27 @@ function DriftBottleApp() {
   const [showNewIdea, setShowNewIdea] = useState(false);
   const [newIdeaTitle, setNewIdeaTitle] = useState("");
 
-  const addBottle = (text, type = "text") => { setBottles(p => [{ id: Date.now(), text, time: "剛剛", done: false, type }, ...p]); setShowInput(false); setNewText(""); setTab(0); };
+  const rrRef = React.useRef(null);
+  const [inputRec, setInputRec] = React.useState(false);
+
+  const startInputVoice = () => {
+    if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const r = new SR(); r.lang = "zh-TW"; r.continuous = true; r.interimResults = true;
+    r.onresult = e => setNewText(Array.from(e.results).map(r => r[0].transcript).join(""));
+    r.onend = () => setInputRec(false);
+    r.onerror = () => setInputRec(false);
+    rrRef.current = r; r.start(); setInputRec(true);
+  };
+  const stopInputVoice = () => { rrRef.current?.stop(); setInputRec(false); };
+
+  const addBottle = (text, type = "text") => { setBottles(p => [{ id: Date.now(), text, time: "剛剛", done: false, type }, ...p]); setShowInput(false); setNewText(""); setTab(0); stopInputVoice(); };
   const toggleDone = id => { setBottles(p => p.map(b => b.id === id ? { ...b, done: !b.done } : b)); setSelBottle(null); };
   const delBottle = id => { setBottles(p => p.filter(b => b.id !== id)); setSelBottle(null); };
   const addIdea = () => { if (!newIdeaTitle.trim()) return; setIdeas(p => [...p, { id: Date.now(), title: newIdeaTitle.trim(), thoughts: [] }]); setNewIdeaTitle(""); setShowNewIdea(false); };
 
   const tabs = [
     { icon: I.bottle, label: "漂流瓶" },
-    { icon: I.mic, label: "語音" },
     { icon: I.routine, label: "日常" },
     { icon: I.pearl, label: "靈感" },
     { icon: I.relax, label: "放鬆" },
@@ -1041,7 +1009,8 @@ function DriftBottleApp() {
 
   return (
     <div style={{
-      width: "100%", maxWidth: 420, height: "100dvh", margin: "0 auto",
+      width: "100%", maxWidth: 420, height: "100dvh", minHeight: "-webkit-fill-available",
+      margin: "0 auto",
       background: `linear-gradient(180deg, ${C.sky1} 0%, ${C.sky2} 40%, ${C.sky3} 100%)`,
       display: "flex", flexDirection: "column", position: "relative", overflow: "hidden",
       fontFamily: "'Zen Maru Gothic', sans-serif", borderRadius: 20,
@@ -1066,7 +1035,59 @@ function DriftBottleApp() {
         @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes sunRay{0%{opacity:.2;height:16px}100%{opacity:.45;height:22px}}
         @keyframes cloudDrift{0%{transform:translateX(0)}100%{transform:translateX(30px)}}
+        @keyframes wcBlob1{0%,100%{transform:scale(1) translate(0,0);opacity:0.18}40%{transform:scale(1.08) translate(12px,-8px);opacity:0.24}70%{transform:scale(0.95) translate(-6px,10px);opacity:0.15}}
+        @keyframes wcBlob2{0%,100%{transform:scale(1) translate(0,0);opacity:0.14}35%{transform:scale(1.12) translate(-15px,6px);opacity:0.22}65%{transform:scale(0.92) translate(8px,-12px);opacity:0.1}}
+        @keyframes wcBlob3{0%,100%{transform:scale(1) translate(0,0);opacity:0.12}50%{transform:scale(1.06) translate(10px,14px);opacity:0.2}}
+        @keyframes paperShimmer{0%,100%{opacity:0.045}50%{opacity:0.065}}
       `}</style>
+
+      {/* ── Watercolor texture layers ── */}
+      {/* Layer 1: Paper grain — subtle repeating lines */}
+      <div style={{
+        position:"absolute", inset:0, zIndex:0, pointerEvents:"none",
+        backgroundImage:"repeating-linear-gradient(93deg, transparent 0px, rgba(255,255,255,0.025) 1px, transparent 2px, transparent 20px), repeating-linear-gradient(179deg, transparent 0px, rgba(255,255,255,0.018) 1px, transparent 2px, transparent 28px)",
+        animation:"paperShimmer 8s ease-in-out infinite",
+      }}/>
+
+      {/* Layer 2: Watercolor bleed blobs — fixed light colors, work on any theme */}
+      <div style={{ position:"absolute", inset:0, zIndex:0, pointerEvents:"none", overflow:"hidden" }}>
+        {/* Top-left teal bleed */}
+        <div style={{
+          position:"absolute", width:"75%", height:"60%", top:"-15%", left:"-20%",
+          background:"radial-gradient(ellipse at 55% 50%, rgba(140,210,220,0.22) 0%, rgba(100,180,200,0.10) 45%, transparent 72%)",
+          borderRadius:"60% 40% 55% 45% / 50% 60% 40% 50%",
+          filter:"blur(30px)",
+          animation:"wcBlob1 18s ease-in-out infinite",
+        }}/>
+        {/* Bottom-right violet bleed */}
+        <div style={{
+          position:"absolute", width:"68%", height:"65%", bottom:"-10%", right:"-12%",
+          background:"radial-gradient(ellipse at 45% 45%, rgba(160,190,230,0.18) 0%, rgba(120,160,210,0.09) 50%, transparent 74%)",
+          borderRadius:"45% 55% 40% 60% / 60% 40% 60% 40%",
+          filter:"blur(35px)",
+          animation:"wcBlob2 22s ease-in-out infinite",
+        }}/>
+        {/* Centre glow bleed */}
+        <div style={{
+          position:"absolute", width:"55%", height:"50%", top:"28%", left:"22%",
+          background:"radial-gradient(ellipse at 50% 50%, rgba(200,230,240,0.10) 0%, transparent 68%)",
+          borderRadius:"50% 50% 60% 40% / 45% 55% 45% 55%",
+          filter:"blur(42px)",
+          animation:"wcBlob3 26s ease-in-out infinite",
+        }}/>
+        {/* Edge vignette — wet paper edge effect */}
+        <div style={{
+          position:"absolute", inset:0,
+          background:"radial-gradient(ellipse at 50% 50%, transparent 52%, rgba(0,0,0,0.28) 100%)",
+          pointerEvents:"none",
+        }}/>
+        {/* Top wash band */}
+        <div style={{
+          position:"absolute", inset:0,
+          background:"linear-gradient(180deg, rgba(180,220,235,0.08) 0%, transparent 25%, rgba(100,150,190,0.06) 60%, transparent 80%, rgba(0,0,0,0.10) 100%)",
+          pointerEvents:"none",
+        }}/>
+      </div>
 
       {/* Celestial */}
       <Celestial type={C.celestial} colors={C} />
@@ -1112,7 +1133,7 @@ function DriftBottleApp() {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, position: "relative", overflow: "visible", zIndex: 5 }}>
+      <div style={{ flex: 1, position: "relative", overflow: "hidden", zIndex: 5 }}>
 
         {/* Tab 0: Bottles */}
         {tab === 0 && (
@@ -1133,13 +1154,37 @@ function DriftBottleApp() {
               backdropFilter: "blur(20px)", borderRadius: 20, padding: 18, border: `1px solid ${C.foam}20`,
               zIndex: 30, animation: "fadeIn 0.3s ease-out",
             }}>
-              <input autoFocus type="text" placeholder="想記住什麼？寫下來丟進海裡..." value={newText}
-                onChange={e => setNewText(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && newText.trim()) addBottle(newText.trim()); if (e.key === "Escape") { setShowInput(false); setNewText(""); } }}
-                style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${C.foam}25`, color: C.moonlight, fontSize: 15, fontFamily: "'Zen Maru Gothic', sans-serif", padding: "8px 0 12px", outline: "none" }}/>
-              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <button onClick={() => { setShowInput(false); setNewText(""); }} style={{ flex: 1, padding: 8, borderRadius: 12, background: C.subtleBg, border: `1px solid ${C.foam}18`, color: C.foam, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", opacity: 0.7 }}>取消</button>
-                <button onClick={() => newText.trim() && addBottle(newText.trim())} style={{ flex: 1, padding: 8, borderRadius: 12, background: `${C.seaGlass}25`, border: `1px solid ${C.seaGlass}40`, color: C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer" }}>丟入海中 🍾</button>
+              {/* 語音 + 文字輸入列 */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button
+                  onClick={inputRec ? stopInputVoice : startInputVoice}
+                  style={{
+                    flexShrink: 0, width: 40, height: 40, borderRadius: "50%",
+                    background: inputRec ? `radial-gradient(circle, ${C.coral}50, ${C.coral}20)` : `${C.foam}15`,
+                    border: `1.5px solid ${inputRec ? C.coral+"80" : C.foam+"30"}`,
+                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                    color: inputRec ? C.coral : C.foam, transition: "all 0.25s",
+                    boxShadow: inputRec ? `0 0 12px ${C.coral}40` : "none",
+                  }}>
+                  {inputRec
+                    ? <div style={{ width: 12, height: 12, borderRadius: 2, background: C.coral }}/>
+                    : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" width="18" height="18"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0014 0M12 18v3M8 21h8"/></svg>
+                  }
+                </button>
+                <input autoFocus type="text"
+                  placeholder={inputRec ? "正在聽你說話..." : "想記住什麼？"}
+                  value={newText}
+                  onChange={e => setNewText(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && newText.trim()) addBottle(newText.trim(), inputRec ? "voice" : "text"); if (e.key === "Escape") { setShowInput(false); setNewText(""); stopInputVoice(); } }}
+                  style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${inputRec ? C.coral+"40" : C.foam+"25"}`, color: C.moonlight, fontSize: 15, fontFamily: "'Zen Maru Gothic', sans-serif", padding: "8px 0 10px", outline: "none", transition: "border-color 0.3s" }}/>
+              </div>
+              {inputRec && <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 6, marginLeft: 50 }}>
+                {[0,1,2,3].map(i => <div key={i} style={{ width: 3, borderRadius: 2, background: C.coral, opacity: 0.7, animation: `eqBar 0.6s ease-in-out ${i*0.15}s infinite alternate`, height: 8 }}/>)}
+                <span style={{ fontSize: 11, color: C.coral, marginLeft: 4, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.8 }}>錄音中</span>
+              </div>}
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button onClick={() => { setShowInput(false); setNewText(""); stopInputVoice(); }} style={{ flex: 1, padding: 8, borderRadius: 12, background: C.subtleBg, border: `1px solid ${C.foam}18`, color: C.foam, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", opacity: 0.7 }}>取消</button>
+                <button onClick={() => newText.trim() && addBottle(newText.trim(), inputRec ? "voice" : "text")} style={{ flex: 1, padding: 8, borderRadius: 12, background: `${C.seaGlass}25`, border: `1px solid ${C.seaGlass}40`, color: C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer" }}>丟入海中 🍾</button>
               </div>
             </div>}
 
@@ -1163,13 +1208,12 @@ function DriftBottleApp() {
           </div>
         )}
 
-        {tab === 1 && <VoiceTab onAddBottle={addBottle} C={C} />}
 
         {/* Tab 2: Routine */}
-        {tab === 2 && <RoutineTab C={C} />}
+        {tab === 1 && <RoutineTab C={C} />}
 
         {/* Tab 3: Ideas */}
-        {tab === 3 && (
+        {tab === 2 && (
           <div style={{ height: "100%", position: "relative" }}>
             <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "30%", background: "linear-gradient(180deg, transparent 0%, rgba(245,230,200,0.04) 100%)", pointerEvents: "none" }}/>
             {ideas.length === 0 ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 16 }}><div style={{ fontSize: 40, opacity: 0.4 }}>✨</div><div style={{ color: C.foam, opacity: 0.5, fontSize: 14, textAlign: "center" }}>海底還沒有珍珠<br/>記下你的第一個靈感吧</div></div>
@@ -1199,15 +1243,16 @@ function DriftBottleApp() {
           </div>
         )}
 
-        {tab === 4 && <RelaxTab C={C} />}
+        {tab === 3 && <RelaxTab C={C} />}
       </div>
 
       {/* Tab Bar */}
       <div style={{
         display: "flex", justifyContent: "space-around", alignItems: "center",
-        padding: "8px 0 calc(16px + env(safe-area-inset-bottom, 0px))",
+        padding: "8px 0 calc(max(16px, env(safe-area-inset-bottom, 16px)))",
         background: C.tabBg, backdropFilter: "blur(20px)", borderTop: `1px solid ${C.tabBorder}`,
         zIndex: 20, position: "relative", transition: "background 2s",
+        flexShrink: 0,
       }}>
         {tabs.map((t, i) => (
           <button key={i} onClick={() => setTab(i)} style={{

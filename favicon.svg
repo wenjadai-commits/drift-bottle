@@ -1,24 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#0a1628"/>
-      <stop offset="100%" stop-color="#163050"/>
-    </linearGradient>
-    <radialGradient id="bottle" cx="50%" cy="40%">
-      <stop offset="0%" stop-color="#a8d8ea" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="#a8d8ea" stop-opacity="0.1"/>
-    </radialGradient>
-  </defs>
-  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
-  <!-- Bottle -->
-  <path d="M26 12h12M32 12v4M24 22c0-3.3 2.7-6 6-6h4c3.3 0 6 2.7 6 6v2l2 4v16c0 2.2-1.8 4-4 4H26c-2.2 0-4-1.8-4-4V28l2-4V22z" 
-    fill="url(#bottle)" stroke="#a8d8ea" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- Water level -->
-  <path d="M24 36h16" stroke="#a8d8ea" stroke-width="1" opacity="0.4"/>
-  <!-- Moon -->
-  <circle cx="50" cy="14" r="5" fill="#fff3e0" opacity="0.6"/>
-  <!-- Stars -->
-  <circle cx="12" cy="10" r="1" fill="#e8f4f8" opacity="0.5"/>
-  <circle cx="18" cy="18" r="0.8" fill="#e8f4f8" opacity="0.4"/>
-  <circle cx="8" cy="22" r="0.6" fill="#e8f4f8" opacity="0.3"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="22" fill="#0a1628"/>
+  <g stroke="#a8d8ea" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M42 18h16M50 18v8M36 32c0-3.3 2.7-6 6-6h16c3.3 0 6 2.7 6 6v3l4 6v22c0 2.2-1.8 4-4 4H36c-2.2 0-4-1.8-4-4V47l4-6v-9z"/>
+    <path d="M32 57h36" opacity="0.5"/>
+    <circle cx="50" cy="48" r="3" fill="#a8d8ea" opacity="0.6"/>
+    <circle cx="44" cy="55" r="2" fill="#a8d8ea" opacity="0.4"/>
+    <circle cx="56" cy="52" r="1.5" fill="#a8d8ea" opacity="0.5"/>
+  </g>
 </svg>
