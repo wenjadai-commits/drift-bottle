@@ -1353,7 +1353,7 @@ function DriftBottleApp() {
               </div>
             </div>}
 
-            {selBottle && <div onClick={() => setSelBottle(null)} style={{
+            {selBottle && bottles.some(b => b.id === selBottle.id) && <div onClick={() => setSelBottle(null)} style={{
               position: "absolute", inset: 0, background: C.overlayBg, backdropFilter: "blur(12px)",
               display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, animation: "fadeIn 0.2s ease-out",
             }}>
