@@ -56,6 +56,22 @@ body{padding:0}
     subscribeUserData: (uid, cb) => onSnapshot(doc(db, "users", uid), snap => {
       if (snap.exists()) cb(snap.data());
     }),
+    clearUserData: async (uid) => {
+      await setDoc(doc(db, "users", uid), { bottles: [], routines: [], ideas: [], updatedAt: Date.now() });
+    },
+    deleteAccount: async () => {
+      const u = auth.currentUser;
+      if (!u) return;
+      try {
+        // Firestore: 直接覆蓋為空，無 deleteDoc 是因為刪除 collection 需後端
+        await setDoc(doc(db, "users", u.uid), { deleted: true, deletedAt: Date.now() });
+        // Auth: delete user
+        await u.delete();
+      } catch(e) {
+        // 若需要 reauth，會丟 error；交由 caller 處理
+        throw e;
+      }
+    },
   };
   window.dispatchEvent(new Event("firebase-ready"));
 </script>
@@ -138,8 +154,14 @@ const useTimeTheme = () => {
 const useAmbientAudio = () => {
   const ctxRef = useRef(null);
   const nodesRef = useRef([]);
+  const masterRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentSound, setCurrentSound] = useState(null);
+  const [volume, setVolumeState] = useState(0.6);
+  const setVolume = useCallback((v) => {
+    setVolumeState(v);
+    if (masterRef.current) masterRef.current.gain.value = v;
+  }, []);
 
   const stop = useCallback(() => {
     nodesRef.current.forEach(n => { try { n.stop?.(); } catch {} try { n.disconnect?.(); } catch {} });
@@ -151,6 +173,12 @@ const useAmbientAudio = () => {
     if (!ctxRef.current) ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
     const ctx = ctxRef.current;
     if (ctx.state === "suspended") ctx.resume();
+    if (!masterRef.current) {
+      masterRef.current = ctx.createGain();
+      masterRef.current.gain.value = volume;
+      masterRef.current.connect(ctx.destination);
+    }
+    const dest = masterRef.current;
     const nodes = [];
     if (type === "waves") {
       const lfo = ctx.createOscillator(); lfo.type = "sine"; lfo.frequency.value = 0.08;
@@ -161,7 +189,7 @@ const useAmbientAudio = () => {
       const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 400; f.Q.value = 1;
       lg.connect(f.frequency);
       const v = ctx.createGain(); v.gain.value = 0.25;
-      ns.connect(f); f.connect(v); v.connect(ctx.destination); lfo.start(); ns.start(); nodes.push(lfo, ns);
+      ns.connect(f); f.connect(v); v.connect(dest); lfo.start(); ns.start(); nodes.push(lfo, ns);
     } else if (type === "rain") {
       const ns = ctx.createBufferSource(); const buf = ctx.createBuffer(2, ctx.sampleRate * 4, ctx.sampleRate);
       for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.15; }
@@ -169,29 +197,29 @@ const useAmbientAudio = () => {
       const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2000;
       const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 8000;
       const v = ctx.createGain(); v.gain.value = 0.35;
-      ns.connect(hp); hp.connect(lp); lp.connect(v); v.connect(ctx.destination); ns.start(); nodes.push(ns);
+      ns.connect(hp); hp.connect(lp); lp.connect(v); v.connect(dest); ns.start(); nodes.push(ns);
     } else if (type === "melody") {
       const notes = [261.6, 329.6, 392, 523.2, 392, 329.6, 261.6, 196];
       const pn = () => { let t = ctx.currentTime; notes.forEach((fr, i) => {
         const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = fr;
         const g = ctx.createGain(); g.gain.setValueAtTime(0, t+i*1.2); g.gain.linearRampToValueAtTime(0.08, t+i*1.2+0.3); g.gain.linearRampToValueAtTime(0, t+i*1.2+1.1);
-        o.connect(g); g.connect(ctx.destination); o.start(t+i*1.2); o.stop(t+i*1.2+1.2);
+        o.connect(g); g.connect(dest); o.start(t+i*1.2); o.stop(t+i*1.2+1.2);
       }); };
       pn(); const iv = setInterval(pn, notes.length * 1200); nodes.push({ stop: () => clearInterval(iv) });
     } else if (type === "night") {
       const dr = ctx.createOscillator(); dr.type = "sine"; dr.frequency.value = 85;
-      const dg = ctx.createGain(); dg.gain.value = 0.06; dr.connect(dg); dg.connect(ctx.destination); dr.start(); nodes.push(dr);
+      const dg = ctx.createGain(); dg.gain.value = 0.06; dr.connect(dg); dg.connect(dest); dr.start(); nodes.push(dr);
       const iv = setInterval(() => {
         const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = 3800 + Math.random() * 800;
         const g = ctx.createGain(); const t = ctx.currentTime;
         g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.03, t+0.02); g.gain.linearRampToValueAtTime(0, t+0.08);
-        o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t+0.1);
+        o.connect(g); g.connect(dest); o.start(t); o.stop(t+0.1);
       }, 300 + Math.random() * 400);
       nodes.push({ stop: () => clearInterval(iv) });
     }
     nodesRef.current = nodes; setPlaying(true); setCurrentSound(type);
   }, [stop]);
-  return { play, stop, playing, currentSound };
+  return { play, stop, playing, currentSound, volume, setVolume };
 };
 
 // ─── Icons ───
@@ -624,6 +652,16 @@ const BubblePopGame = ({ C }) => {
 // ─── Music section (used inside RelaxTab) ───
 const MusicSection = ({ C }) => {
   const audio = useAmbientAudio();
+
+  const VolumeSlider = () => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16, padding: "8px 14px", background: C.subtleBg, borderRadius: 14, opacity: audio.currentSound ? 1 : 0.5, transition: "opacity 0.3s" }}>
+      <svg viewBox="0 0 24 24" fill="none" stroke={C.foam} strokeWidth="1.6" strokeLinecap="round" width="16" height="16"><path d="M11 5L6 9H2v6h4l5 4V5z"/>{audio.volume > 0.05 && <path d="M15.5 8.5a5 5 0 010 7" opacity="0.7"/>}{audio.volume > 0.5 && <path d="M19 5a9 9 0 010 14" opacity="0.5"/>}</svg>
+      <input type="range" min="0" max="1" step="0.05" value={audio.volume} onChange={e => audio.setVolume(parseFloat(e.target.value))} style={{
+        flex: 1, accentColor: C.seaGlass,
+      }}/>
+      <span style={{ color: C.foam, opacity: 0.5, fontSize: 11, minWidth: 26, textAlign: "right", fontFamily: "'Zen Maru Gothic', sans-serif" }}>{Math.round(audio.volume*100)}</span>
+    </div>
+  );
   const sounds = [
     { id: "waves", emoji: "🌊", label: "海浪", desc: "潮起潮落的聲音" },
     { id: "rain", emoji: "🌧️", label: "雨聲", desc: "輕柔的雨滴" },
@@ -647,6 +685,7 @@ const MusicSection = ({ C }) => {
           {[0,1,2,3].map(i=><div key={i} style={{ width: 3, borderRadius: 2, background: C.foam, animation: `eqBar 0.8s ease-in-out ${i*0.15}s infinite alternate` }}/>)}
         </div>}
       </button>)}
+      <VolumeSlider />
     </div>
   );
 };
@@ -681,8 +720,8 @@ const RelaxTab = ({ C }) => {
 };
 
 // ─── Routine / Daily Checklist Tab ───
-const RoutineTab = ({ C }) => {
-  const [routines, setRoutines] = useState([
+const RoutineTab = ({ C, routines, setRoutines, syncRoutines }) => {
+  const _initial = [
     {
       id: 1, title: "🚪 出門前確認", freq: "daily", icon: "🚪",
       items: [
@@ -709,7 +748,45 @@ const RoutineTab = ({ C }) => {
         { id: 3, label: "倒垃圾", checked: false, emoji: "🗑️" },
       ],
     },
-  ]);
+  ];
+  // routines 來自父層 props；若還沒初始化就用預設
+  React.useEffect(() => {
+    if (routines === undefined || routines === null) {
+      setRoutines(_initial);
+      return;
+    }
+    // 自動重置檢查
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+    // 週的識別：取 ISO 週數（簡化版：取週日為週首）
+    const weekStart = new Date(now); weekStart.setHours(0,0,0,0);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    const weekKey = `${weekStart.getFullYear()}-${weekStart.getMonth()}-${weekStart.getDate()}`;
+
+    let dirty = false;
+    const reset = routines.map(r => {
+      if (r.freq === "daily" && r.lastResetKey !== todayKey) {
+        dirty = true;
+        return { ...r, lastResetKey: todayKey, items: r.items.map(it => ({ ...it, checked: false })) };
+      }
+      if (r.freq === "weekly" && r.lastResetKey !== weekKey) {
+        dirty = true;
+        return { ...r, lastResetKey: weekKey, items: r.items.map(it => ({ ...it, checked: false })) };
+      }
+      return r;
+    });
+    if (dirty) {
+      setRoutines(reset);
+      syncRoutines && syncRoutines(reset);
+    }
+  }, [routines]);
+  const _setRoutines = (updater) => {
+    setRoutines(prev => {
+      const next = typeof updater === "function" ? updater(prev || _initial) : updater;
+      syncRoutines && syncRoutines(next);
+      return next;
+    });
+  };
   const [activeRoutine, setActiveRoutine] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [newRoutineTitle, setNewRoutineTitle] = useState("");
@@ -719,7 +796,7 @@ const RoutineTab = ({ C }) => {
   const [newItemEmoji, setNewItemEmoji] = useState("✅");
 
   const toggleItem = (routineId, itemId) => {
-    setRoutines(prev => prev.map(r => r.id === routineId ? {
+    _setRoutines(prev => prev.map(r => r.id === routineId ? {
       ...r, items: r.items.map(it => it.id === itemId ? { ...it, checked: !it.checked } : it),
     } : r));
     if (activeRoutine?.id === routineId) {
@@ -730,7 +807,7 @@ const RoutineTab = ({ C }) => {
   };
 
   const resetRoutine = (routineId) => {
-    setRoutines(prev => prev.map(r => r.id === routineId ? {
+    _setRoutines(prev => prev.map(r => r.id === routineId ? {
       ...r, items: r.items.map(it => ({ ...it, checked: false })),
     } : r));
     if (activeRoutine?.id === routineId) {
@@ -741,7 +818,7 @@ const RoutineTab = ({ C }) => {
   const addRoutine = () => {
     if (!newRoutineTitle.trim()) return;
     const nr = { id: Date.now(), title: newRoutineTitle.trim(), freq: newRoutineFreq, icon: "📋", items: [] };
-    setRoutines(p => [...p, nr]);
+    _setRoutines(p => [...p, nr]);
     setNewRoutineTitle(""); setShowAdd(false);
     setActiveRoutine(nr);
   };
@@ -750,20 +827,20 @@ const RoutineTab = ({ C }) => {
     if (!newItemLabel.trim() || !activeRoutine) return;
     const ni = { id: Date.now(), label: newItemLabel.trim(), checked: false, emoji: newItemEmoji || "✅" };
     const updated = { ...activeRoutine, items: [...activeRoutine.items, ni] };
-    setRoutines(p => p.map(r => r.id === activeRoutine.id ? updated : r));
+    _setRoutines(p => p.map(r => r.id === activeRoutine.id ? updated : r));
     setActiveRoutine(updated);
     setNewItemLabel(""); setNewItemEmoji("✅"); setShowAddItem(false);
   };
 
   const deleteRoutine = (id) => {
-    setRoutines(p => p.filter(r => r.id !== id));
+    _setRoutines(p => p.filter(r => r.id !== id));
     setActiveRoutine(null);
   };
 
   const deleteItem = (itemId) => {
     if (!activeRoutine) return;
     const updated = { ...activeRoutine, items: activeRoutine.items.filter(it => it.id !== itemId) };
-    setRoutines(p => p.map(r => r.id === activeRoutine.id ? updated : r));
+    _setRoutines(p => p.map(r => r.id === activeRoutine.id ? updated : r));
     setActiveRoutine(updated);
   };
 
@@ -771,7 +848,7 @@ const RoutineTab = ({ C }) => {
 
   // ─── Detail view ───
   if (activeRoutine) {
-    const r = routines.find(x => x.id === activeRoutine.id) || activeRoutine;
+    const r = (routines || _initial).find(x => x.id === activeRoutine.id) || activeRoutine;
     const doneCount = r.items.filter(it => it.checked).length;
     const total = r.items.length;
     const allDone = total > 0 && doneCount === total;
@@ -902,7 +979,7 @@ const RoutineTab = ({ C }) => {
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-        {routines.map((r, idx) => {
+        {(routines || _initial).map((r, idx) => {
           const doneCount = r.items.filter(it => it.checked).length;
           const total = r.items.length;
           const allDone = total > 0 && doneCount === total;
@@ -1005,6 +1082,28 @@ const RoutineTab = ({ C }) => {
 function DriftBottleApp() {
   const { colors: C, period, isDay, hour } = useTimeTheme();
   const [tab, setTab] = useState(0);
+  const [routines, setRoutines] = useState(undefined); // RoutineTab 會初始化
+  const [reduceMotion, setReduceMotion] = useState(() => {
+    try { return localStorage.getItem("driftbottle_reduce_motion") === "1"; } catch(e) { return false; }
+  });
+  const toggleReduceMotion = () => {
+    setReduceMotion(v => {
+      const next = !v;
+      try { localStorage.setItem("driftbottle_reduce_motion", next ? "1" : "0"); } catch(e) {}
+      return next;
+    });
+  };
+
+  // P2-10: 同步狀態（已有 syncing；加上 syncStatus 訊息）
+  const [syncStatus, setSyncStatus] = useState(""); // "ok" | "error" | ""
+
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    try { return !localStorage.getItem("driftbottle_seen"); } catch(e) { return false; }
+  });
+  const dismissOnboarding = () => {
+    setShowOnboarding(false);
+    try { localStorage.setItem("driftbottle_seen", "1"); } catch(e) {}
+  };
   const [bottles, setBottles] = useState([
     { id: 1, text: "明天下午三點牙醫", time: "剛剛", done: false, type: "voice" },
     { id: 2, text: "買貓糧", time: "1小時前", done: false, type: "text" },
@@ -1016,25 +1115,65 @@ function DriftBottleApp() {
     { id: 103, title: "送朋友的生日禮物", thoughts: [] },
   ]);
   const [showInput, setShowInput] = useState(false);
+  const [newDueDate, setNewDueDate] = useState("");
+  const [bottleFilter, setBottleFilter] = useState("all"); // all | today | done
   const [newText, setNewText] = useState("");
-  const [selBottle, setSelBottle] = useState(null);
+  const [selBottleId, setSelBottleId] = useState(null);
+  const selBottle = bottles.find(b => b.id === selBottleId) || null;
   const [selIdea, setSelIdea] = useState(null);
   const [showNewIdea, setShowNewIdea] = useState(false);
   const [newIdeaTitle, setNewIdeaTitle] = useState("");
 
   const rrRef = React.useRef(null);
   const [inputRec, setInputRec] = React.useState(false);
+  const [voiceStatus, setVoiceStatus] = React.useState(""); // 提示訊息
 
   const startInputVoice = () => {
-    if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) return;
+    setVoiceStatus("");
+    if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
+      setVoiceStatus("此瀏覽器不支援語音辨識，請改用文字輸入");
+      return;
+    }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const r = new SR(); r.lang = "zh-TW"; r.continuous = true; r.interimResults = true;
+    let r;
+    try {
+      r = new SR();
+    } catch(e) {
+      setVoiceStatus("無法啟動語音辨識");
+      return;
+    }
+    r.lang = "zh-TW"; r.continuous = true; r.interimResults = true;
     r.onresult = e => setNewText(Array.from(e.results).map(r => r[0].transcript).join(""));
     r.onend = () => setInputRec(false);
-    r.onerror = () => setInputRec(false);
-    rrRef.current = r; r.start(); setInputRec(true);
+    r.onerror = (ev) => {
+      setInputRec(false);
+      const code = ev.error;
+      if (code === "not-allowed" || code === "service-not-allowed") {
+        setVoiceStatus("請開啟麥克風權限");
+      } else if (code === "no-speech") {
+        setVoiceStatus("沒聽到聲音，再試一次？");
+      } else if (code === "audio-capture") {
+        setVoiceStatus("找不到麥克風裝置");
+      } else if (code === "network") {
+        setVoiceStatus("網路連線不穩，請稍後再試");
+      } else if (code === "aborted") {
+        // 使用者主動中斷，不顯示錯誤
+      } else {
+        setVoiceStatus("語音辨識中斷：" + code);
+      }
+      // 已辨識文字保留在 newText
+    };
+    try {
+      rrRef.current = r; r.start(); setInputRec(true);
+    } catch(e) {
+      setVoiceStatus("無法開始錄音：" + e.message);
+      setInputRec(false);
+    }
   };
-  const stopInputVoice = () => { rrRef.current?.stop(); setInputRec(false); };
+  const stopInputVoice = () => {
+    try { rrRef.current?.stop(); } catch(e) {}
+    setInputRec(false);
+  };
 
   // ─── Auth state ───
   const [user, setUser] = React.useState(null);
@@ -1067,14 +1206,23 @@ function DriftBottleApp() {
     else window.addEventListener("firebase-ready", init, { once: true });
   }, []);
 
-  // Auto-sync to Firestore when data changes
-  const syncToCloud = React.useCallback((bottles, routines, ideas) => {
+  // Auto-sync to Firestore when data changes (partial update)
+  const syncToCloud = React.useCallback((patch) => {
     if (!window.__fb || !user) return;
     clearTimeout(syncTimerRef.current);
+    setSyncing(true);
     syncTimerRef.current = setTimeout(async () => {
       try {
-        await window.__fb.saveUserData(user.uid, { bottles, routines, ideas, updatedAt: Date.now() });
-      } catch(e) { console.warn("sync failed", e); }
+        await window.__fb.saveUserData(user.uid, { ...patch, updatedAt: Date.now() });
+        setSyncStatus("ok");
+        setTimeout(() => setSyncStatus(""), 1500);
+      } catch(e) {
+        console.warn("sync failed", e);
+        setSyncStatus("error");
+        setTimeout(() => setSyncStatus(""), 3000);
+      } finally {
+        setSyncing(false);
+      }
     }, 1500);
   }, [user]);
 
@@ -1087,22 +1235,47 @@ function DriftBottleApp() {
     setUser(null); setShowAuthPanel(false);
   };
 
-  const addBottle = (text, type = "text") => {
-    const nb = [{ id: Date.now(), text, time: "剛剛", done: false, type }];
-    setBottles(p => { const next = [...nb, ...p]; syncToCloud(next, routines, ideas); return next; });
-    setShowInput(false); setNewText(""); setTab(0); stopInputVoice();
+  const [authMsg, setAuthMsg] = React.useState("");
+  const handleClearData = async () => {
+    if (!user) return;
+    if (!window.confirm("確定要清空所有雲端資料？此動作無法復原")) return;
+    try {
+      await window.__fb.clearUserData(user.uid);
+      setBottles([]); setIdeas([]); setRoutines([]);
+      setAuthMsg("✓ 已清空雲端資料");
+      setTimeout(() => setAuthMsg(""), 3000);
+    } catch(e) {
+      setAuthMsg("清空失敗：" + e.message);
+    }
+  };
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    if (!window.confirm("確定要刪除帳號？所有資料會永久消失")) return;
+    try {
+      await window.__fb.deleteAccount();
+      setUser(null); setShowAuthPanel(false);
+      setBottles([]); setIdeas([]); setRoutines([]);
+    } catch(e) {
+      if (e.code === "auth/requires-recent-login") {
+        setAuthMsg("請重新登入後再刪除帳號");
+      } else {
+        setAuthMsg("刪除失敗：" + (e.message || e.code));
+      }
+    }
+  };
+
+  const addBottle = (text, type = "text", dueDate = null) => {
+    const nb = [{ id: Date.now(), text, time: "剛剛", done: false, type, dueDate, createdAt: Date.now() }];
+    setBottles(p => { const next = [...nb, ...p]; syncToCloud({ bottles: next }); return next; });
+    setShowInput(false); setNewText(""); setNewDueDate(""); setTab(0); stopInputVoice(); setVoiceStatus("");
   };
   const toggleDone = id => {
-    setBottles(p => { const next = p.map(b => b.id === id ? { ...b, done: !b.done } : b); syncToCloud(next, routines, ideas); return next; });
-    setSelBottle(null);
+    setBottles(p => { const next = p.map(b => b.id === id ? { ...b, done: !b.done } : b); syncToCloud({ bottles: next }); return next; });
   };
   const delBottle = id => {
-    setSelBottle(null); // 先關 overlay
-    setTimeout(() => {  // 等下一個 render cycle 再刪
-      setBottles(p => { const next = p.filter(b => b.id !== id); syncToCloud(next, routines, ideas); return next; });
-    }, 0);
+    setBottles(p => { const next = p.filter(b => b.id !== id); syncToCloud({ bottles: next }); return next; });
   };
-  const addIdea = () => { if (!newIdeaTitle.trim()) return; setIdeas(p => [...p, { id: Date.now(), title: newIdeaTitle.trim(), thoughts: [] }]); setNewIdeaTitle(""); setShowNewIdea(false); };
+  const addIdea = () => { if (!newIdeaTitle.trim()) return; setIdeas(p => { const next = [...p, { id: Date.now(), title: newIdeaTitle.trim(), thoughts: [] }]; syncToCloud({ ideas: next }); return next; }); setNewIdeaTitle(""); setShowNewIdea(false); };
 
   const tabs = [
     { icon: I.bottle, label: "漂流瓶" },
@@ -1122,6 +1295,7 @@ function DriftBottleApp() {
     }}>
       <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@300;400;500;700&display=swap" rel="stylesheet"/>
       <style>{`
+        ${reduceMotion ? "*,*::before,*::after{animation-duration:0.001s !important;animation-iteration-count:1 !important;transition-duration:0.05s !important}" : ""}
         @keyframes floatBottle{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-12px) rotate(3deg)}}
         @keyframes pearlFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
         @keyframes pearlPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
@@ -1236,6 +1410,8 @@ function DriftBottleApp() {
               </div>
           }
           {syncing && <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.seaGlass, animation: "moonGlow 1s ease-in-out infinite" }}/>}
+          {!syncing && syncStatus === "ok" && <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.seaGlass, opacity: 0.7 }}/>}
+          {!syncing && syncStatus === "error" && <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.coral, opacity: 0.8 }}/>}
         </button>
       </div>
 
@@ -1253,11 +1429,35 @@ function DriftBottleApp() {
             <div style={{ color: C.moonlight, fontSize: 16, fontWeight: 600, marginBottom: 4, fontFamily: "'Zen Maru Gothic', sans-serif" }}>{user.displayName}</div>
             <div style={{ color: C.foam, fontSize: 12, opacity: 0.6, marginBottom: 8, fontFamily: "'Zen Maru Gothic', sans-serif" }}>{user.email}</div>
             <div style={{ color: C.seaGlass, fontSize: 11, opacity: 0.8, marginBottom: 24, fontFamily: "'Zen Maru Gothic', sans-serif" }}>✓ 資料已同步至雲端</div>
+            <div onClick={toggleReduceMotion} style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "10px 14px", borderRadius: 12, marginBottom: 10,
+              background: C.subtleBg, border: `1px solid ${C.foam}15`, cursor: "pointer",
+            }}>
+              <span style={{ color: C.foam, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif" }}>減少動畫</span>
+              <div style={{ width: 36, height: 20, borderRadius: 10, background: reduceMotion ? `${C.seaGlass}50` : `${C.foam}15`, position: "relative", transition: "background 0.2s" }}>
+                <div style={{ width: 16, height: 16, borderRadius: "50%", background: reduceMotion ? C.seaGlass : C.foam, position: "absolute", top: 2, left: reduceMotion ? 18 : 2, transition: "all 0.2s" }}/>
+              </div>
+            </div>
             <button onClick={handleSignOut} style={{
               width: "100%", padding: "10px 0", borderRadius: 14,
-              background: `${C.coral}18`, border: `1px solid ${C.coral}35`,
-              color: C.coral, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer",
+              background: C.subtleBg, border: `1px solid ${C.foam}20`,
+              color: C.foam, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer",
+              marginBottom: 8,
             }}>登出</button>
+            <button onClick={handleClearData} style={{
+              width: "100%", padding: "9px 0", borderRadius: 12, marginBottom: 6,
+              background: "transparent", border: `1px solid ${C.foam}18`,
+              color: C.foam, fontSize: 12, fontFamily: "'Zen Maru Gothic', sans-serif",
+              cursor: "pointer", opacity: 0.7,
+            }}>清空雲端資料</button>
+            <button onClick={handleDeleteAccount} style={{
+              width: "100%", padding: "9px 0", borderRadius: 12,
+              background: "transparent", border: `1px dashed ${C.coral}30`,
+              color: C.coral, fontSize: 12, fontFamily: "'Zen Maru Gothic', sans-serif",
+              cursor: "pointer", opacity: 0.7,
+            }}>刪除帳號</button>
+            {authMsg && <div style={{ marginTop: 12, fontSize: 11, color: C.foam, opacity: 0.7, fontFamily: "'Zen Maru Gothic', sans-serif" }}>{authMsg}</div>}
           </>) : (<>
             <div style={{ fontSize: 40, marginBottom: 14 }}>🌊</div>
             <div style={{ color: C.moonlight, fontSize: 17, fontWeight: 600, marginBottom: 8, fontFamily: "'Zen Maru Gothic', sans-serif" }}>登入帳號</div>
@@ -1278,6 +1478,16 @@ function DriftBottleApp() {
               </svg>
               使用 Google 登入
             </button>
+            <div onClick={toggleReduceMotion} style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "10px 14px", borderRadius: 12, marginBottom: 10,
+              background: C.subtleBg, border: `1px solid ${C.foam}15`, cursor: "pointer",
+            }}>
+              <span style={{ color: C.foam, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif" }}>減少動畫</span>
+              <div style={{ width: 36, height: 20, borderRadius: 10, background: reduceMotion ? `${C.seaGlass}50` : `${C.foam}15`, position: "relative", transition: "background 0.2s" }}>
+                <div style={{ width: 16, height: 16, borderRadius: "50%", background: reduceMotion ? C.seaGlass : C.foam, position: "absolute", top: 2, left: reduceMotion ? 18 : 2, transition: "all 0.2s" }}/>
+              </div>
+            </div>
             <button onClick={() => setShowAuthPanel(false)} style={{
               width: "100%", padding: "10px 0", borderRadius: 14,
               background: "transparent", border: `1px solid ${C.foam}20`,
@@ -1285,6 +1495,31 @@ function DriftBottleApp() {
               cursor: "pointer", opacity: 0.7,
             }}>先繼續用，不登入</button>
           </>)}
+        </div>
+      </div>}
+
+      {/* Onboarding */}
+      {showOnboarding && <div style={{
+        position: "absolute", inset: 0, background: C.overlayBg, backdropFilter: "blur(20px)",
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, animation: "fadeIn 0.3s ease-out",
+      }}>
+        <div style={{
+          background: C.panelBg, borderRadius: 28, padding: 32, width: "84%", maxWidth: 320,
+          border: `1px solid ${C.foam}20`, textAlign: "center",
+        }}>
+          <div style={{ fontSize: 44, marginBottom: 14 }}>🌊</div>
+          <div style={{ color: C.moonlight, fontSize: 18, fontWeight: 600, marginBottom: 12, fontFamily: "'Zen Maru Gothic', sans-serif" }}>歡迎來到漂流瓶</div>
+          <div style={{ color: C.foam, fontSize: 13, lineHeight: 2, marginBottom: 22, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.85, textAlign: "left", padding: "0 8px" }}>
+            🍾　把想記住的事丟進海裡<br/>
+            🎙️　可以打字也可以用說的<br/>
+            ⏰　設定截止時間提醒自己<br/>
+            ☁️　登入後自動同步到雲端
+          </div>
+          <button onClick={dismissOnboarding} style={{
+            width: "100%", padding: "11px 0", borderRadius: 14,
+            background: `${C.seaGlass}28`, border: `1px solid ${C.seaGlass}45`,
+            color: C.seaGlass, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer",
+          }}>開始使用</button>
         </div>
       </div>}
 
@@ -1300,13 +1535,40 @@ function DriftBottleApp() {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, position: "relative", overflow: "hidden", zIndex: 5 }}>
+      <div style={{ flex: 1, position: "relative", overflow: "visible", zIndex: 5 }}>
 
         {/* Tab 0: Bottles */}
-        {tab === 0 && (
+        {tab === 0 && (() => {
+          const today = new Date(); today.setHours(0,0,0,0);
+          const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
+          const filteredBottles = bottles.filter(b => {
+            if (bottleFilter === "today") {
+              if (b.done) return false;
+              if (!b.dueDate) return true; // 沒設截止時間，預設算今日
+              return b.dueDate < tomorrow.getTime();
+            }
+            if (bottleFilter === "done") return b.done;
+            return !b.done; // all = 未完成
+          });
+          const hint = bottleFilter === "today" ? "今天還沒有要做的事" : bottleFilter === "done" ? "還沒完成過的事" : "海面很平靜，還沒有漂流瓶";
+          return (
           <div style={{ height: "100%", position: "relative" }}>
-            {bottles.length === 0 ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 16 }}><div style={{ fontSize: 40, opacity: 0.4 }}>🌊</div><div style={{ color: C.foam, opacity: 0.5, fontSize: 14 }}>海面很平靜，還沒有漂流瓶</div></div>
-              : bottles.map((b, i) => <FloatingBottle key={b.id} bottle={b} index={i} onClick={setSelBottle} C={C} />)}
+            {/* Filter bar */}
+            <div style={{ position: "absolute", top: 8, left: 16, right: 16, zIndex: 11, display: "flex", gap: 6, justifyContent: "center" }}>
+              {[{k:"all",l:"全部"},{k:"today",l:"今天"},{k:"done",l:"已完成"}].map(opt => (
+                <button key={opt.k} onClick={() => setBottleFilter(opt.k)} style={{
+                  padding: "5px 12px", borderRadius: 14, fontSize: 11,
+                  background: bottleFilter === opt.k ? `${C.seaGlass}30` : C.subtleBg,
+                  border: `1px solid ${bottleFilter === opt.k ? C.seaGlass+"50" : C.foam+"15"}`,
+                  color: bottleFilter === opt.k ? C.seaGlass : C.foam,
+                  fontFamily: "'Zen Maru Gothic', sans-serif",
+                  cursor: "pointer", opacity: bottleFilter === opt.k ? 1 : 0.7,
+                  transition: "all 0.2s",
+                }}>{opt.l}</button>
+              ))}
+            </div>
+            {filteredBottles.length === 0 ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 16 }}><div style={{ fontSize: 40, opacity: 0.4 }}>🌊</div><div style={{ color: C.foam, opacity: 0.5, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif" }}>{hint}</div>{bottleFilter === "all" && bottles.length === 0 && <div style={{ color: C.foam, opacity: 0.4, fontSize: 12, fontFamily: "'Zen Maru Gothic', sans-serif", marginTop: -8 }}>試著記下一件小事吧</div>}</div>
+              : filteredBottles.map((b, i) => <FloatingBottle key={b.id} bottle={b} index={i} onClick={(b) => setSelBottleId(b.id)} C={C} />)}
 
             <button onClick={() => setShowInput(true)} style={{
               position: "absolute", bottom: 16, right: 16, width: 52, height: 52, borderRadius: "50%",
@@ -1345,17 +1607,36 @@ function DriftBottleApp() {
                   onKeyDown={e => { if (e.key === "Enter" && newText.trim()) addBottle(newText.trim(), inputRec ? "voice" : "text"); if (e.key === "Escape") { setShowInput(false); setNewText(""); stopInputVoice(); } }}
                   style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${inputRec ? C.coral+"40" : C.foam+"25"}`, color: C.moonlight, fontSize: 15, fontFamily: "'Zen Maru Gothic', sans-serif", padding: "8px 0 10px", outline: "none", transition: "border-color 0.3s" }}/>
               </div>
+              {voiceStatus && !inputRec && <div style={{
+                marginTop: 8, padding: "6px 10px", borderRadius: 8,
+                background: `${C.coral}15`, border: `1px solid ${C.coral}25`,
+                color: C.coral, fontSize: 11, fontFamily: "'Zen Maru Gothic', sans-serif",
+                opacity: 0.85, textAlign: "center",
+              }}>{voiceStatus}</div>}
               {inputRec && <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 6, marginLeft: 50 }}>
                 {[0,1,2,3].map(i => <div key={i} style={{ width: 3, borderRadius: 2, background: C.coral, opacity: 0.7, animation: `eqBar 0.6s ease-in-out ${i*0.15}s infinite alternate`, height: 8 }}/>)}
                 <span style={{ fontSize: 11, color: C.coral, marginLeft: 4, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.8 }}>錄音中</span>
               </div>}
+              <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: C.foam, opacity: 0.6, fontSize: 11, fontFamily: "'Zen Maru Gothic', sans-serif" }}>截止</span>
+                <input type="datetime-local" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} style={{
+                  flex: 1, background: C.subtleBg, border: `1px solid ${C.foam}15`, borderRadius: 8,
+                  color: C.moonlight, fontSize: 12, padding: "5px 8px", outline: "none",
+                  fontFamily: "'Zen Maru Gothic', sans-serif",
+                  colorScheme: "dark",
+                }}/>
+                {newDueDate && <button onClick={() => setNewDueDate("")} style={{
+                  background: "transparent", border: "none", color: C.foam, opacity: 0.5,
+                  cursor: "pointer", fontSize: 14, padding: 0,
+                }}>✕</button>}
+              </div>
               <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                <button onClick={() => { setShowInput(false); setNewText(""); stopInputVoice(); }} style={{ flex: 1, padding: 8, borderRadius: 12, background: C.subtleBg, border: `1px solid ${C.foam}18`, color: C.foam, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", opacity: 0.7 }}>取消</button>
-                <button onClick={() => newText.trim() && addBottle(newText.trim(), inputRec ? "voice" : "text")} style={{ flex: 1, padding: 8, borderRadius: 12, background: `${C.seaGlass}25`, border: `1px solid ${C.seaGlass}40`, color: C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer" }}>丟入海中 🍾</button>
+                <button onClick={() => { setShowInput(false); setNewText(""); setNewDueDate(""); stopInputVoice(); setVoiceStatus(""); }} style={{ flex: 1, padding: 8, borderRadius: 12, background: C.subtleBg, border: `1px solid ${C.foam}18`, color: C.foam, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", opacity: 0.7 }}>取消</button>
+                <button onClick={() => newText.trim() && addBottle(newText.trim(), inputRec ? "voice" : "text", newDueDate ? new Date(newDueDate).getTime() : null)} style={{ flex: 1, padding: 8, borderRadius: 12, background: `${C.seaGlass}25`, border: `1px solid ${C.seaGlass}40`, color: C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer" }}>丟入海中 🍾</button>
               </div>
             </div>}
 
-            {selBottle && <div onClick={() => setSelBottle(null)} style={{
+            {selBottle && bottles.find(b => b.id === selBottle.id) && <div onClick={() => setSelBottleId(null)} style={{
               position: "absolute", inset: 0, background: C.overlayBg, backdropFilter: "blur(12px)",
               display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, animation: "fadeIn 0.2s ease-out",
             }}>
@@ -1365,19 +1646,30 @@ function DriftBottleApp() {
               }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>🍾</div>
                 <div style={{ color: C.moonlight, fontSize: 17, lineHeight: 1.6, marginBottom: 6, textDecoration: selBottle.done ? "line-through" : "none", opacity: selBottle.done ? 0.5 : 1 }}>{selBottle.text}</div>
-                <div style={{ color: C.foam, fontSize: 12, opacity: 0.5, marginBottom: 20 }}>{selBottle.type === "voice" ? "🎙️ 語音" : "✉️ 文字"} · {selBottle.time}</div>
+                <div style={{ color: C.foam, fontSize: 12, opacity: 0.5, marginBottom: selBottle.dueDate ? 8 : 20 }}>{selBottle.type === "voice" ? "🎙️ 語音" : "✉️ 文字"} · {selBottle.time}</div>
+                {selBottle.dueDate && (() => {
+                  const due = new Date(selBottle.dueDate);
+                  const now = Date.now();
+                  const isOverdue = !selBottle.done && due.getTime() < now;
+                  const fmt = due.toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+                  return <div style={{
+                    color: isOverdue ? C.coral : C.seaGlass, fontSize: 11, marginBottom: 18,
+                    fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.85,
+                  }}>{isOverdue ? "⚠️ 已過 " : "⏰ 截止 "}{fmt}</div>;
+                })()}
                 <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={() => toggleDone(selBottle.id)} style={{ flex: 1, padding: 10, borderRadius: 14, background: selBottle.done ? C.subtleBg : `${C.seaGlass}20`, border: `1px solid ${selBottle.done ? "rgba(255,255,255,0.1)" : C.seaGlass + "40"}`, color: selBottle.done ? C.foam : C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{selBottle.done ? "未完成" : <>{I.check} 完成</>}</button>
+                  <button onClick={() => { toggleDone(selBottle.id); setSelBottleId(null); }} style={{ flex: 1, padding: 10, borderRadius: 14, background: selBottle.done ? C.subtleBg : `${C.seaGlass}20`, border: `1px solid ${selBottle.done ? "rgba(255,255,255,0.1)" : C.seaGlass + "40"}`, color: selBottle.done ? C.foam : C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{selBottle.done ? "未完成" : <>{I.check} 完成</>}</button>
                   <button onClick={() => delBottle(selBottle.id)} style={{ padding: "10px 14px", borderRadius: 14, background: `${C.coral}18`, border: `1px solid ${C.coral}30`, color: C.coral, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>{I.trash}</button>
                 </div>
               </div>
             </div>}
           </div>
-        )}
+        )
+        })()}
 
 
         {/* Tab 2: Routine */}
-        {tab === 1 && <RoutineTab C={C} />}
+        {tab === 1 && <RoutineTab C={C} routines={routines} setRoutines={setRoutines} syncRoutines={(r) => syncToCloud({ routines: r })} />}
 
         {/* Tab 3: Ideas */}
         {tab === 2 && (
