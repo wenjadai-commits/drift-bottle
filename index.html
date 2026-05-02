@@ -222,6 +222,14 @@ const useAmbientAudio = () => {
   return { play, stop, playing, currentSound, volume, setVolume };
 };
 
+// ─── ID generator ───
+const uid = () => {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  } catch(e) {}
+  return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 9);
+};
+
 // ─── Icons ───
 const I = {
   bottle: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="24" height="24"><path d="M10 2h4M12 2v3M8 8c0-1.7 1.3-3 3-3h2c1.7 0 3 1.3 3 3v1l1 2v8c0 1.1-.9 2-2 2H9c-1.1 0-2-.9-2-2v-8l1-2V8z"/><path d="M7 15h10" opacity="0.5"/></svg>,
@@ -280,29 +288,167 @@ const getGreeting = (hour) => {
   return "夜深了，好好休息";
 };
 
+// ─── 緊急程度判斷：依時間 + priority 給每瓶分級 ───
+const getBottleUrgency = (bottle) => {
+  if (bottle.done) return "done";
+  const now = Date.now();
+  const due = bottle.dueDate;
+  const priority = bottle.priority || "normal"; // urgent | normal | low
+
+  if (due && due < now) return "overdue";
+  if (due) {
+    const today = new Date(); today.setHours(23, 59, 59, 999);
+    if (due <= today.getTime()) return "today";
+    const week = today.getTime() + 6 * 24 * 60 * 60 * 1000;
+    if (due <= week) return "week";
+    return "later";
+  }
+  // 沒設截止時間，依 priority
+  if (priority === "urgent") return "today";
+  if (priority === "low") return "later";
+  return "week"; // 普通的事預設「本週」
+};
+
+// ─── 視覺等級的設定（每個 urgency 對應一組樣式） ───
+const URGENCY_STYLES = {
+  overdue: {
+    band: 0,      // 最上層（眼前）
+    scale: 1.08,
+    glowColor: "rgba(255,140,120,0.55)",
+    borderColor: "rgba(255,140,120,0.75)",
+    label: "等你很久了",
+    labelColor: "#FF8C78",
+    floatDur: 6,  // 慢慢飄
+  },
+  today: {
+    band: 1,
+    scale: 1.0,
+    glowColor: "rgba(255,200,120,0.40)",
+    borderColor: "rgba(255,200,120,0.55)",
+    label: "今天",
+    labelColor: "#FFC878",
+    floatDur: 5,
+  },
+  week: {
+    band: 2,
+    scale: 0.92,
+    glowColor: "rgba(140,210,220,0.30)",
+    borderColor: "rgba(140,210,220,0.45)",
+    label: "本週",
+    labelColor: "#8CD2DC",
+    floatDur: 4.5,
+  },
+  later: {
+    band: 3,
+    scale: 0.78,
+    glowColor: "rgba(180,200,220,0.18)",
+    borderColor: "rgba(180,200,220,0.30)",
+    label: "之後",
+    labelColor: "#B4C8DC",
+    floatDur: 4,
+  },
+  done: {
+    band: 4, // 最底（化珍珠）
+    scale: 0.5,
+    glowColor: "rgba(180,220,210,0.25)",
+    borderColor: "rgba(180,220,210,0.40)",
+    label: "✓",
+    labelColor: "#B4DCD2",
+    floatDur: 3.5,
+  },
+};
+
+// ─── 排版：focus 區的卡片用左右錯落定位 ───
+const layoutFocusBottles = (bottles) => {
+  // 最多顯示 4 張在 focus 區
+  const positions = new Map();
+  bottles.slice(0, 4).forEach((b, i) => {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const baseX = col === 0 ? 6 : 48;
+    const idStr = String(b.id);
+    const seed = idStr.charCodeAt(0);
+    const jitterX = (seed % 4);
+    const x = baseX + jitterX;
+    const y = 12 + row * 22; // 兩行：12%, 34%
+    positions.set(b.id, { x, y });
+  });
+  return positions;
+};
+
 // ─── FloatingBottle ───
-const FloatingBottle = ({ bottle, index, onClick, C }) => {
-  const yOff = 30 + (index % 3) * 18;
-  const xPos = 8 + ((index * 37) % 55); // max ~63%, 卡片寬度約160px, 63%+160px < 100%
-  const delay = index * 0.7;
-  const dur = 4 + (index % 3) * 1.2;
+const FloatingBottle = ({ bottle, index, mode = "focus", onClick, C, position }) => {
+  const urgency = getBottleUrgency(bottle);
+  const style = URGENCY_STYLES[urgency];
+  const delay = (index % 5) * 0.7;
+  const dur = style.floatDur;
   const textColor = C.cardText || C.moonlight;
   const subColor = C.cardSubtext || C.foam;
+  const isUrgent = urgency === "overdue" || urgency === "today";
 
+  // mode === "focus" : 漂浮在上方重點區
+  // mode === "list"  : 下方清單列表
+  if (mode === "list") {
+    return (
+      <div onClick={() => onClick(bottle)} style={{
+        cursor: "pointer", padding: "10px 12px", marginBottom: 8,
+        background: C.cardBg, borderRadius: 12,
+        border: `1px solid ${style.borderColor}`,
+        boxShadow: `0 2px 10px ${style.glowColor}`,
+        opacity: bottle.done ? 0.55 : (urgency === "later" ? 0.85 : 1),
+        animation: "popIn 0.3s ease-out",
+        display: "flex", alignItems: "center", gap: 10,
+      }}>
+        <div style={{
+          width: 8, height: 8, borderRadius: "50%",
+          background: style.labelColor, flexShrink: 0,
+          boxShadow: `0 0 8px ${style.labelColor}80`,
+        }}/>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 13, color: bottle.done ? C.foam : textColor,
+            fontFamily: "'Zen Maru Gothic', sans-serif",
+            textDecoration: bottle.done ? "line-through" : "none",
+            wordBreak: "break-word", lineHeight: 1.4,
+          }}>{bottle.text}</div>
+          <div style={{ fontSize: 10, color: subColor, opacity: 0.6, marginTop: 2, fontFamily: "'Zen Maru Gothic', sans-serif" }}>
+            {bottle.type === "voice" ? "🎙️" : "✉️"} {style.label} · {bottle.time}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // focus 模式：漂浮卡片
+  const xPos = position?.x ?? 10;
+  const yOff = position?.y ?? 30;
   return (
     <div onClick={() => onClick(bottle)} style={{
       position: "absolute", left: `${xPos}%`, top: `${yOff}%`, cursor: "pointer",
-      animation: `floatBottle ${dur}s ease-in-out ${delay}s infinite`, zIndex: 10,
+      animation: `popIn 0.3s ease-out, floatBottle ${dur}s ease-in-out ${delay}s infinite`,
+      zIndex: 10,
       maxWidth: "calc(100% - 24px)",
     }}>
       <div style={{
         background: C.cardBg,
         backdropFilter: "blur(6px)", borderRadius: 14, padding: "10px 16px",
-        border: `1px solid ${C.cardBorder}`,
-        maxWidth: 160, minWidth: 80, boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
-        opacity: bottle.done ? 0.55 : 1,
+        border: `1px solid ${style.borderColor}`,
+        maxWidth: 160, minWidth: 80,
+        boxShadow: `0 4px 20px rgba(0,0,0,0.15), 0 0 ${isUrgent ? 18 : 8}px ${style.glowColor}`,
+        opacity: urgency === "later" ? 0.7 : (bottle.done ? 0.55 : 1),
+        position: "relative",
       }}>
-        <div style={{ fontSize: 11, color: subColor, opacity: 0.6, marginBottom: 4, fontFamily: "'Zen Maru Gothic', sans-serif" }}>
+        {/* 緊急度標籤 */}
+        <div style={{
+          position: "absolute", top: -7, left: 10,
+          background: style.labelColor + "20",
+          border: `1px solid ${style.labelColor}50`,
+          color: style.labelColor,
+          fontSize: 9, padding: "1px 6px", borderRadius: 6,
+          fontFamily: "'Zen Maru Gothic', sans-serif", fontWeight: 600,
+          letterSpacing: 0.5,
+        }}>{style.label}</div>
+        <div style={{ fontSize: 11, color: subColor, opacity: 0.6, marginBottom: 4, marginTop: 2, fontFamily: "'Zen Maru Gothic', sans-serif" }}>
           {bottle.type === "voice" ? "🎙️" : "✉️"} {bottle.time}
         </div>
         <div style={{
@@ -399,7 +545,7 @@ const IdeaDetail = ({ idea, onClose, onUpdate, onDelete, C }) => {
       </div>}
       <div style={{ flex: 1, overflowY: "auto", padding: "0 16px", display: "flex", flexDirection: "column", gap: 10 }}>
         {idea.thoughts.map((t, i) => (
-          <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", animation: `fadeIn 0.3s ease-out ${i*0.05}s both` }}>
+          <div key={t.id || `t-${i}`} style={{ display: "flex", gap: 10, alignItems: "flex-start", animation: `fadeIn 0.3s ease-out ${i*0.05}s both` }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 4 }}>
               <div style={{ width: 8+Math.min(i,4)*1.5, height: 8+Math.min(i,4)*1.5, borderRadius: "50%", background: i<2?"#d4b896":i<4?"#ffe0b2":"#fff3e0", boxShadow: i>=3?`0 0 6px #ffe0b260`:"none" }}/>
               {i < idea.thoughts.length - 1 && <div style={{ width: 1, flex: 1, minHeight: 20, background: `linear-gradient(180deg, ${C.foam}20, transparent)` }}/>}
@@ -627,7 +773,7 @@ const BubblePopGame = ({ C }) => {
     iv.current = setInterval(() => {
       setBubbles(p => {
         const f = p.filter(b => Date.now()-b.born<3000);
-        if (f.length < 6) f.push({ id: Date.now()+Math.random(), x: 10+Math.random()*80, y: 10+Math.random()*70, size: 30+Math.random()*30, born: Date.now(), color: [C.foam,C.seaGlass,C.shell,C.coral][Math.floor(Math.random()*4)] });
+        if (f.length < 6) f.push({ id: uid()+Math.random(), x: 10+Math.random()*80, y: 10+Math.random()*70, size: 30+Math.random()*30, born: Date.now(), color: [C.foam,C.seaGlass,C.shell,C.coral][Math.floor(Math.random()*4)] });
         return f;
       });
     }, 600);
@@ -749,16 +895,27 @@ const RoutineTab = ({ C, routines, setRoutines, syncRoutines }) => {
       ],
     },
   ];
-  // routines 來自父層 props；若還沒初始化就用預設
+  // routines 初始化（只跑一次）
+  const initializedRef = React.useRef(false);
   React.useEffect(() => {
+    if (initializedRef.current) return;
     if (routines === undefined || routines === null) {
       setRoutines(_initial);
+      initializedRef.current = true;
       return;
     }
-    // 自動重置檢查
+    initializedRef.current = true;
+  }, [routines]);
+
+  // 自動重置：只在掛載時檢查一次
+  const resetCheckedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (resetCheckedRef.current) return;
+    if (!routines || routines.length === 0) return;
+    resetCheckedRef.current = true;
+
     const now = new Date();
     const todayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-    // 週的識別：取 ISO 週數（簡化版：取週日為週首）
     const weekStart = new Date(now); weekStart.setHours(0,0,0,0);
     weekStart.setDate(weekStart.getDate() - weekStart.getDay());
     const weekKey = `${weekStart.getFullYear()}-${weekStart.getMonth()}-${weekStart.getDate()}`;
@@ -817,7 +974,7 @@ const RoutineTab = ({ C, routines, setRoutines, syncRoutines }) => {
 
   const addRoutine = () => {
     if (!newRoutineTitle.trim()) return;
-    const nr = { id: Date.now(), title: newRoutineTitle.trim(), freq: newRoutineFreq, icon: "📋", items: [] };
+    const nr = { id: uid(), title: newRoutineTitle.trim(), freq: newRoutineFreq, icon: "📋", items: [] };
     _setRoutines(p => [...p, nr]);
     setNewRoutineTitle(""); setShowAdd(false);
     setActiveRoutine(nr);
@@ -825,7 +982,7 @@ const RoutineTab = ({ C, routines, setRoutines, syncRoutines }) => {
 
   const addItem = () => {
     if (!newItemLabel.trim() || !activeRoutine) return;
-    const ni = { id: Date.now(), label: newItemLabel.trim(), checked: false, emoji: newItemEmoji || "✅" };
+    const ni = { id: uid(), label: newItemLabel.trim(), checked: false, emoji: newItemEmoji || "✅" };
     const updated = { ...activeRoutine, items: [...activeRoutine.items, ni] };
     _setRoutines(p => p.map(r => r.id === activeRoutine.id ? updated : r));
     setActiveRoutine(updated);
@@ -866,11 +1023,11 @@ const RoutineTab = ({ C, routines, setRoutines, syncRoutines }) => {
           </div>
           <button onClick={() => resetRoutine(r.id)} style={{
             background: C.subtleBg, border: `1px solid ${C.foam}20`, borderRadius: 10,
-            padding: "5px 10px", color: C.foam, fontSize: 11, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", opacity: 0.6,
+            padding: "8px 14px", color: C.foam, fontSize: 11, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", opacity: 0.6, minHeight: 36,
           }}>重置</button>
           <button onClick={() => deleteRoutine(r.id)} style={{
             background: `${C.coral}15`, border: `1px solid ${C.coral}25`, borderRadius: 10,
-            padding: "5px 8px", color: C.coral, cursor: "pointer",
+            padding: "8px 10px", color: C.coral, cursor: "pointer", minHeight: 36, minWidth: 36, display: "flex", alignItems: "center", justifyContent: "center",
           }}>{I.trash}</button>
         </div>
 
@@ -1110,12 +1267,13 @@ function DriftBottleApp() {
     { id: 3, text: "回覆小美的訊息", time: "今早", done: true, type: "text" },
   ]);
   const [ideas, setIdeas] = useState([
-    { id: 101, title: "寫一首關於海的歌", thoughts: [{ text: "副歌想用「潮汐」當意象", time: "2天前" }, { text: "可以加入 lo-fi beat", time: "昨天" }, { text: "開頭用海浪的取樣音效", time: "今早" }] },
-    { id: 102, title: "App 的新功能靈感", thoughts: [{ text: "加入每日一句海的訊息", time: "3天前" }] },
+    { id: 101, title: "寫一首關於海的歌", thoughts: [{ id: "t-6935", text: "副歌想用「潮汐」當意象", time: "2天前" }, { id: "t-9419", text: "可以加入 lo-fi beat", time: "昨天" }, { id: "t-6433", text: "開頭用海浪的取樣音效", time: "今早" }] },
+    { id: 102, title: "App 的新功能靈感", thoughts: [{ id: "t-7741", text: "加入每日一句海的訊息", time: "3天前" }] },
     { id: 103, title: "送朋友的生日禮物", thoughts: [] },
   ]);
   const [showInput, setShowInput] = useState(false);
   const [newDueDate, setNewDueDate] = useState("");
+  const [newPriority, setNewPriority] = useState("normal");
   const [bottleFilter, setBottleFilter] = useState("all"); // all | today | done
   const [newText, setNewText] = useState("");
   const [selBottleId, setSelBottleId] = useState(null);
@@ -1264,10 +1422,10 @@ function DriftBottleApp() {
     }
   };
 
-  const addBottle = (text, type = "text", dueDate = null) => {
-    const nb = [{ id: Date.now(), text, time: "剛剛", done: false, type, dueDate, createdAt: Date.now() }];
+  const addBottle = (text, type = "text", dueDate = null, priority = "normal") => {
+    const nb = [{ id: uid(), text, time: "剛剛", done: false, type, dueDate, priority, createdAt: Date.now() }];
     setBottles(p => { const next = [...nb, ...p]; syncToCloud({ bottles: next }); return next; });
-    setShowInput(false); setNewText(""); setNewDueDate(""); setTab(0); stopInputVoice(); setVoiceStatus("");
+    setShowInput(false); setNewText(""); setNewDueDate(""); setNewPriority("normal"); setTab(0); stopInputVoice(); setVoiceStatus("");
   };
   const toggleDone = id => {
     setBottles(p => { const next = p.map(b => b.id === id ? { ...b, done: !b.done } : b); syncToCloud({ bottles: next }); return next; });
@@ -1275,7 +1433,7 @@ function DriftBottleApp() {
   const delBottle = id => {
     setBottles(p => { const next = p.filter(b => b.id !== id); syncToCloud({ bottles: next }); return next; });
   };
-  const addIdea = () => { if (!newIdeaTitle.trim()) return; setIdeas(p => { const next = [...p, { id: Date.now(), title: newIdeaTitle.trim(), thoughts: [] }]; syncToCloud({ ideas: next }); return next; }); setNewIdeaTitle(""); setShowNewIdea(false); };
+  const addIdea = () => { if (!newIdeaTitle.trim()) return; setIdeas(p => { const next = [...p, { id: uid(), title: newIdeaTitle.trim(), thoughts: [] }]; syncToCloud({ ideas: next }); return next; }); setNewIdeaTitle(""); setShowNewIdea(false); };
 
   const tabs = [
     { icon: I.bottle, label: "漂流瓶" },
@@ -1311,6 +1469,8 @@ function DriftBottleApp() {
         @keyframes moonGlow{0%,100%{opacity:.6;filter:blur(20px)}50%{opacity:.9;filter:blur(30px)}}
         @keyframes waveMove{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
         @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes popIn{0%{opacity:0;transform:scale(0.92)}60%{transform:scale(1.04)}100%{opacity:1;transform:scale(1)}}
+        @keyframes pulseTap{0%{transform:scale(1)}50%{transform:scale(0.94)}100%{transform:scale(1)}}
         @keyframes sunRay{0%{opacity:.2;height:16px}100%{opacity:.45;height:22px}}
         @keyframes cloudDrift{0%{transform:translateX(0)}100%{transform:translateX(30px)}}
         @keyframes wcBlob1{0%,100%{transform:scale(1) translate(0,0);opacity:0.18}40%{transform:scale(1.08) translate(12px,-8px);opacity:0.24}70%{transform:scale(0.95) translate(-6px,10px);opacity:0.15}}
@@ -1412,6 +1572,7 @@ function DriftBottleApp() {
           {syncing && <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.seaGlass, animation: "moonGlow 1s ease-in-out infinite" }}/>}
           {!syncing && syncStatus === "ok" && <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.seaGlass, opacity: 0.7 }}/>}
           {!syncing && syncStatus === "error" && <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.coral, opacity: 0.8 }}/>}
+          {syncing && <span style={{ fontSize: 10, color: C.foam, opacity: 0.6, marginLeft: 2, fontFamily: "'Zen Maru Gothic', sans-serif" }}>同步中</span>}
         </button>
       </div>
 
@@ -1550,9 +1711,42 @@ function DriftBottleApp() {
             if (bottleFilter === "done") return b.done;
             return !b.done; // all = 未完成
           });
-          const hint = bottleFilter === "today" ? "今天還沒有要做的事" : bottleFilter === "done" ? "還沒完成過的事" : "海面很平靜，還沒有漂流瓶";
+          const hint = bottleFilter === "today" ? "今天還沒有要做的事 🌊" : bottleFilter === "done" ? "還沒有完成過的事 🌙" : "這裡還沒有任何漂流瓶 ✨";
           return (
-          <div style={{ height: "100%", position: "relative" }}>
+          <div style={{ height: "100%", position: "relative", overflow: "hidden" }}>
+            {/* 今日進度膠囊 - 只在 all/today filter 顯示 */}
+            {bottleFilter !== "done" && (() => {
+              const todayBottles = bottles.filter(b => {
+                if (b.done) return false;
+                const u = getBottleUrgency(b);
+                return u === "today" || u === "overdue";
+              });
+              const doneToday = bottles.filter(b => {
+                if (!b.done) return false;
+                const today = new Date(); today.setHours(0,0,0,0);
+                const dueOk = b.dueDate && b.dueDate < today.getTime() + 86400000;
+                return dueOk || (b.createdAt && b.createdAt > today.getTime());
+              }).length;
+              const total = todayBottles.length + doneToday;
+              if (total === 0) return null;
+              const pct = total > 0 ? (doneToday / total) * 100 : 0;
+              const overdue = todayBottles.filter(b => getBottleUrgency(b) === "overdue").length;
+              return <div style={{
+                position: "absolute", top: 50, left: "50%", transform: "translateX(-50%)",
+                zIndex: 12, display: "flex", alignItems: "center", gap: 8,
+                background: C.subtleBg, padding: "5px 14px", borderRadius: 16,
+                border: `1px solid ${C.foam}15`, fontFamily: "'Zen Maru Gothic', sans-serif",
+                backdropFilter: "blur(8px)",
+              }}>
+                <span style={{ fontSize: 11, color: C.foam, opacity: 0.85 }}>今日</span>
+                <span style={{ fontSize: 12, color: C.seaGlass, fontWeight: 600 }}>{doneToday}/{total}</span>
+                <div style={{ width: 50, height: 4, background: `${C.foam}15`, borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ width: `${pct}%`, height: "100%", background: C.seaGlass, transition: "width 0.4s ease-out" }}/>
+                </div>
+                {overdue > 0 && <span style={{ fontSize: 10, color: "#FF8C78", opacity: 0.9 }}>⏰{overdue}</span>}
+              </div>;
+            })()}
+
             {/* Filter bar */}
             <div style={{ position: "absolute", top: 8, left: 16, right: 16, zIndex: 11, display: "flex", gap: 6, justifyContent: "center" }}>
               {[{k:"all",l:"全部"},{k:"today",l:"今天"},{k:"done",l:"已完成"}].map(opt => (
@@ -1567,8 +1761,34 @@ function DriftBottleApp() {
                 }}>{opt.l}</button>
               ))}
             </div>
-            {filteredBottles.length === 0 ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 16 }}><div style={{ fontSize: 40, opacity: 0.4 }}>🌊</div><div style={{ color: C.foam, opacity: 0.5, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif" }}>{hint}</div>{bottleFilter === "all" && bottles.length === 0 && <div style={{ color: C.foam, opacity: 0.4, fontSize: 12, fontFamily: "'Zen Maru Gothic', sans-serif", marginTop: -8 }}>試著記下一件小事吧</div>}</div>
-              : filteredBottles.map((b, i) => <FloatingBottle key={b.id} bottle={b} index={i} onClick={(b) => setSelBottleId(b.id)} C={C} />)}
+            {filteredBottles.length === 0 ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 16 }}><div style={{ fontSize: 40, opacity: 0.4 }}>🌊</div><div style={{ color: C.foam, opacity: 0.5, fontSize: 14, fontFamily: "'Zen Maru Gothic', sans-serif" }}>{hint}</div>{bottleFilter === "all" && bottles.length === 0 && <div style={{ color: C.foam, opacity: 0.4, fontSize: 12, fontFamily: "'Zen Maru Gothic', sans-serif", marginTop: -8 }}>試著記下一件小事吧～</div>}</div>
+              : (() => {
+                // 分區：focus（緊急 - overdue/today）走漂浮、其他走清單
+                const focus = [], list = [];
+                filteredBottles.forEach(b => {
+                  const u = getBottleUrgency(b);
+                  if (u === "overdue" || u === "today") focus.push(b);
+                  else list.push(b);
+                });
+                const positions = layoutFocusBottles(focus);
+                return <>
+                  {/* Focus 區：漂浮卡片，最多 4 張 */}
+                  {focus.slice(0, 4).map((b, i) => <FloatingBottle key={b.id} bottle={b} index={i} mode="focus" position={positions.get(b.id)} onClick={(b) => setSelBottleId(b.id)} C={C} />)}
+
+                  {/* 清單區：可滾動 */}
+                  {list.length > 0 && <div style={{
+                    position: "absolute", left: 12, right: 12, top: focus.length > 0 ? "58%" : "14%", bottom: 80,
+                    overflowY: "auto", overflowX: "hidden",
+                    padding: "8px 4px",
+                  }}>
+                    {focus.length > 0 && <div style={{
+                      fontSize: 11, color: C.foam, opacity: 0.5, marginBottom: 8, marginLeft: 4,
+                      fontFamily: "'Zen Maru Gothic', sans-serif", letterSpacing: 1,
+                    }}>之後的事 · {list.length}</div>}
+                    {list.map((b, i) => <FloatingBottle key={b.id} bottle={b} index={i} mode="list" onClick={(b) => setSelBottleId(b.id)} C={C} />)}
+                  </div>}
+                </>;
+              })()}
 
             <button onClick={() => setShowInput(true)} style={{
               position: "absolute", bottom: 16, right: 16, width: 52, height: 52, borderRadius: "50%",
@@ -1605,6 +1825,8 @@ function DriftBottleApp() {
                   value={newText}
                   onChange={e => setNewText(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && newText.trim()) addBottle(newText.trim(), inputRec ? "voice" : "text"); if (e.key === "Escape") { setShowInput(false); setNewText(""); stopInputVoice(); } }}
+                  onFocus={e => e.target.style.borderBottomColor = C.seaGlass + "80"}
+                  onBlur={e => e.target.style.borderBottomColor = inputRec ? C.coral+"40" : C.foam+"25"}
                   style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${inputRec ? C.coral+"40" : C.foam+"25"}`, color: C.moonlight, fontSize: 15, fontFamily: "'Zen Maru Gothic', sans-serif", padding: "8px 0 10px", outline: "none", transition: "border-color 0.3s" }}/>
               </div>
               {voiceStatus && !inputRec && <div style={{
@@ -1617,22 +1839,62 @@ function DriftBottleApp() {
                 {[0,1,2,3].map(i => <div key={i} style={{ width: 3, borderRadius: 2, background: C.coral, opacity: 0.7, animation: `eqBar 0.6s ease-in-out ${i*0.15}s infinite alternate`, height: 8 }}/>)}
                 <span style={{ fontSize: 11, color: C.coral, marginLeft: 4, fontFamily: "'Zen Maru Gothic', sans-serif", opacity: 0.8 }}>錄音中</span>
               </div>}
-              <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ color: C.foam, opacity: 0.6, fontSize: 11, fontFamily: "'Zen Maru Gothic', sans-serif" }}>截止</span>
+              {/* 快捷時間按鈕 */}
+              <div style={{ marginTop: 14, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {[
+                  { k: "today", label: "今天", calc: () => { const d = new Date(); d.setHours(23,59,0,0); return d; } },
+                  { k: "tomorrow", label: "明天", calc: () => { const d = new Date(); d.setDate(d.getDate()+1); d.setHours(20,0,0,0); return d; } },
+                  { k: "week", label: "本週", calc: () => { const d = new Date(); d.setDate(d.getDate()+7); d.setHours(20,0,0,0); return d; } },
+                ].map(opt => {
+                  const isActive = newDueDate && Math.abs(new Date(newDueDate).getTime() - opt.calc().getTime()) < 60000;
+                  return <button key={opt.k} onClick={() => {
+                    const d = opt.calc();
+                    const pad = n => String(n).padStart(2,"0");
+                    const v = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                    setNewDueDate(v);
+                  }} style={{
+                    padding: "5px 12px", borderRadius: 12, fontSize: 11,
+                    background: isActive ? `${C.seaGlass}30` : C.subtleBg,
+                    border: `1px solid ${isActive ? C.seaGlass+"50" : C.foam+"15"}`,
+                    color: isActive ? C.seaGlass : C.foam,
+                    fontFamily: "'Zen Maru Gothic', sans-serif",
+                    cursor: "pointer",
+                  }}>{opt.label}</button>;
+                })}
                 <input type="datetime-local" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} style={{
-                  flex: 1, background: C.subtleBg, border: `1px solid ${C.foam}15`, borderRadius: 8,
-                  color: C.moonlight, fontSize: 12, padding: "5px 8px", outline: "none",
+                  flex: 1, minWidth: 110, background: C.subtleBg, border: `1px solid ${C.foam}15`, borderRadius: 12,
+                  color: C.moonlight, fontSize: 11, padding: "5px 8px", outline: "none",
                   fontFamily: "'Zen Maru Gothic', sans-serif",
                   colorScheme: "dark",
                 }}/>
                 {newDueDate && <button onClick={() => setNewDueDate("")} style={{
                   background: "transparent", border: "none", color: C.foam, opacity: 0.5,
-                  cursor: "pointer", fontSize: 14, padding: 0,
+                  cursor: "pointer", fontSize: 14, padding: "0 4px",
                 }}>✕</button>}
               </div>
+              {/* 重要性 */}
+              <div style={{ marginTop: 10, display: "flex", gap: 6, alignItems: "center" }}>
+                <span style={{ color: C.foam, opacity: 0.5, fontSize: 11, fontFamily: "'Zen Maru Gothic', sans-serif", marginRight: 2 }}>重要</span>
+                {[
+                  { k: "urgent", label: "🔴 必做", color: "#FF8C78" },
+                  { k: "normal", label: "🟡 普通", color: "#FFC878" },
+                  { k: "low", label: "⚪ 隨意", color: "#B4C8DC" },
+                ].map(opt => {
+                  const isActive = newPriority === opt.k;
+                  return <button key={opt.k} onClick={() => setNewPriority(opt.k)} style={{
+                    padding: "5px 10px", borderRadius: 12, fontSize: 11,
+                    background: isActive ? opt.color + "25" : C.subtleBg,
+                    border: `1px solid ${isActive ? opt.color + "60" : C.foam+"15"}`,
+                    color: isActive ? opt.color : C.foam,
+                    opacity: isActive ? 1 : 0.7,
+                    fontFamily: "'Zen Maru Gothic', sans-serif",
+                    cursor: "pointer", transition: "all 0.2s",
+                  }}>{opt.label}</button>;
+                })}
+              </div>
               <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                <button onClick={() => { setShowInput(false); setNewText(""); setNewDueDate(""); stopInputVoice(); setVoiceStatus(""); }} style={{ flex: 1, padding: 8, borderRadius: 12, background: C.subtleBg, border: `1px solid ${C.foam}18`, color: C.foam, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", opacity: 0.7 }}>取消</button>
-                <button onClick={() => newText.trim() && addBottle(newText.trim(), inputRec ? "voice" : "text", newDueDate ? new Date(newDueDate).getTime() : null)} style={{ flex: 1, padding: 8, borderRadius: 12, background: `${C.seaGlass}25`, border: `1px solid ${C.seaGlass}40`, color: C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer" }}>丟入海中 🍾</button>
+                <button onClick={() => { setShowInput(false); setNewText(""); setNewDueDate(""); setNewPriority("normal"); stopInputVoice(); setVoiceStatus(""); }} style={{ flex: 1, padding: 8, borderRadius: 12, background: C.subtleBg, border: `1px solid ${C.foam}18`, color: C.foam, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer", opacity: 0.7 }}>取消</button>
+                <button onClick={() => newText.trim() && addBottle(newText.trim(), inputRec ? "voice" : "text", newDueDate ? new Date(newDueDate).getTime() : null, newPriority)} style={{ flex: 1, padding: 8, borderRadius: 12, background: `${C.seaGlass}25`, border: `1px solid ${C.seaGlass}40`, color: C.seaGlass, fontSize: 13, fontFamily: "'Zen Maru Gothic', sans-serif", cursor: "pointer" }}>丟入海中 🍾</button>
               </div>
             </div>}
 
